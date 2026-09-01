@@ -1,0 +1,214 @@
+/*
+ * FreeCore client skin
+ * Visual language shared with freecore.cc and docs.freecore.cc:
+ * midnight surfaces, cyan documentation accents, green voxel controls, and glass layers.
+ */
+
+.root {
+    -fx-font-family: "Inter", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    -fx-font-size: 13px;
+}
+
+.jfx-decorator {
+    -fx-decorator-color: #18232e;
+    -fx-background-color: #0b1015;
+}
+
+.jfx-tool-bar {
+    -fx-background-color: rgba(8, 13, 18, 0.92);
+    -fx-border-color: rgba(184, 210, 255, 0.16);
+    -fx-border-width: 0 0 1 0;
+}
+
+.jfx-tool-bar .jfx-decorator-title,
+.jfx-tool-bar Label {
+    -fx-text-fill: #d9e7f5;
+}
+
+.jfx-tool-bar .jfx-decorator-title {
+    -fx-font-family: "Press Start 2P", "Consolas", monospace;
+    -fx-font-size: 11px;
+    -fx-letter-spacing: 0.08em;
+}
+
+.jfx-tool-bar .jfx-decorator-button .svg {
+    -fx-fill: #a9c8e7;
+}
+
+.jfx-decorator-content-container {
+    -fx-background-color: rgba(8, 13, 18, 0.64);
+}
+
+.gray-background,
+.content-background {
+    -fx-background-color: rgba(9, 15, 21, 0.74);
+}
+
+.advanced-list-box-content {
+    -fx-padding: 20 12 20 12;
+    -fx-spacing: 8;
+}
+
+.advanced-list-item > .rippler-container > .container {
+    -fx-background-color: rgba(255, 255, 255, 0.055);
+    -fx-background-radius: 4;
+    -fx-border-color: rgba(184, 210, 255, 0.08);
+    -fx-border-width: 1;
+    -fx-padding: 4 0;
+}
+
+.advanced-list-item > .rippler-container > .container > .two-line-list-item > .first-line > .title {
+    -fx-font-size: 16px;
+}
+
+.advanced-list-item > .rippler-container > .container > .two-line-list-item > HBox > .subtitle {
+    -fx-font-size: 13px;
+}
+
+.advanced-list-item:hover > .rippler-container > .container {
+    -fx-background-color: rgba(17, 168, 205, 0.16);
+    -fx-border-color: rgba(128, 212, 232, 0.42);
+}
+
+.class-title Text {
+    -fx-fill: #82b9cd;
+    -fx-font-family: "Press Start 2P", "Consolas", monospace;
+    -fx-font-size: 13px;
+}
+
+.class-title {
+    -fx-padding: 10 16 8 16;
+}
+
+.launch-pane > .jfx-button {
+    -fx-background-color: #334d3a;
+    -fx-border-color: rgba(190, 224, 170, 0.38);
+    -fx-border-width: 2;
+    -fx-effect: dropshadow(gaussian, rgba(81, 139, 90, 0.34), 16, 0.18, 0, 5);
+}
+
+.launch-pane > .jfx-button:hover {
+    -fx-background-color: #426448;
+    -fx-border-color: #b7dc9d;
+    -fx-effect: dropshadow(gaussian, rgba(130, 184, 109, 0.45), 22, 0.24, 0, 7);
+}
+
+.launch-pane > .jfx-button:pressed {
+    -fx-translate-y: 3px;
+}
+
+.launch-pane > .jfx-button.launch-button {
+    -fx-background-radius: 4 0 0 4;
+    -fx-border-width: 2 3 2 2;
+    -fx-border-color: rgba(190, 224, 170, 0.38) rgba(9, 15, 12, 0.62) rgba(190, 224, 170, 0.38) rgba(190, 224, 170, 0.38);
+}
+
+.launch-pane > .jfx-button.menu-button {
+    -fx-background-radius: 0 4 4 0;
+}
+
+.launch-pane > .jfx-button,
+.launch-pane > .jfx-button * {
+    -fx-text-fill: #e7f3df;
+    -fx-font-family: "Press Start 2P", "Consolas", monospace;
+    -fx-font-size: 10px;
+}
+
+.launch-pane .svg {
+    -fx-fill: #e7f3df;
+}
+
+.card,
+.card-no-padding,
+.card-non-transparent {
+    -fx-background-color: rgba(25, 35, 42, 0.82);
+    -fx-background-radius: 6;
+    -fx-border-color: rgba(184, 210, 255, 0.15);
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.38), 24, 0.2, 0, 8);
+}
+
+.freecore-brand-pane {
+    -fx-padding: 28;
+}
+
+.freecore-brand-icon {
+    -fx-effect: none;
+}
+
+.freecore-brand-title {
+    -fx-font-family: "Press Start 2P", "Consolas", monospace;
+    -fx-font-size: 30px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #edf3fb;
+    -fx-effect: dropshadow(gaussian, rgba(113, 163, 220, 0.45), 16, 0.25, 0, 2);
+}
+
+.freecore-brand-tagline {
+    -fx-font-family: "Press Start 2P", "Consolas", monospace;
+    -fx-font-size: 9px;
+    -fx-letter-spacing: 0.16em;
+    -fx-text-fill: #91b8c9;
+}
+
+.freecore-link-button {
+    -fx-background-color: rgba(255, 255, 255, 0.06);
+    -fx-border-color: rgba(184, 210, 255, 0.24);
+    -fx-border-width: 1;
+    -fx-background-radius: 4;
+    -fx-border-radius: 4;
+    -fx-padding: 15 24;
+    -fx-min-width: 120px;
+    -fx-pref-width: 120px;
+    -fx-max-width: 120px;
+    -fx-min-height: 56px;
+    -fx-pref-height: 56px;
+    -fx-max-height: 56px;
+    -fx-cursor: hand;
+    -fx-text-fill: #c8dfed;
+    -fx-font-family: "Press Start 2P", "Consolas", monospace;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.freecore-link-button:hover {
+    -fx-background-color: rgba(17, 168, 205, 0.2);
+    -fx-border-color: #80d4e8;
+    -fx-translate-y: -2;
+}
+
+.freecore-link-button:pressed {
+    -fx-translate-y: 1;
+}
+
+.freecore-backdrop {
+    -fx-background-color: linear-gradient(to bottom, #0b121a 0%, #111b24 48%, #0b1211 100%);
+    -fx-opacity: 0.96;
+}
+
+.freecore-backdrop:before {
+    -fx-background-color: transparent;
+}
+
+.freecore-glow {
+    -fx-fill: rgba(97, 154, 218, 0.16);
+    -fx-effect: dropshadow(gaussian, rgba(125, 177, 243, 0.4), 90, 0.34, 0, 0);
+}
+
+.freecore-glow-secondary {
+    -fx-fill: rgba(104, 171, 110, 0.11);
+    -fx-effect: dropshadow(gaussian, rgba(104, 171, 110, 0.32), 75, 0.32, 0, 0);
+}
+
+.freecore-signal {
+    -fx-stroke: rgba(184, 210, 255, 0.34);
+    -fx-stroke-width: 1.2;
+    -fx-effect: dropshadow(gaussian, rgba(143, 187, 255, 0.65), 12, 0.28, 0, 0);
+}
+
+.bubble {
+    -fx-background-color: rgba(18, 29, 39, 0.92);
+    -fx-border-color: rgba(184, 210, 255, 0.2);
+    -fx-border-width: 1;
+    -fx-background-radius: 5;
+}

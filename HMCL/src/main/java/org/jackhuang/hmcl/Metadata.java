@@ -34,12 +34,14 @@ public final class Metadata {
     private Metadata() {
     }
 
-    public static final String NAME = "HMCL";
-    public static final String FULL_NAME = "Hello Minecraft! Launcher";
+    /// Short product name shown in the window title and launcher chrome.
+    public static final String NAME = "FreeCore";
+    /// Full product name shown in the about page and platform integration.
+    public static final String FULL_NAME = "FreeCore Minecraft Launcher";
     public static final String VERSION = System.getProperty("hmcl.version.override", JarUtils.getAttribute("hmcl.version", "@develop@"));
 
     /// Explicit Application User Model ID used for Windows taskbar grouping and pinning.
-    public static final String WINDOWS_APP_USER_MODEL_ID = "org.jackhuang.hmcl";
+    public static final String WINDOWS_APP_USER_MODEL_ID = "cc.freecore.launcher";
 
     public static final String TITLE = NAME + " " + VERSION;
     public static final String FULL_TITLE = FULL_NAME + " v" + VERSION;
@@ -48,16 +50,17 @@ public final class Metadata {
     public static final int MINIMUM_SUPPORTED_JAVA_VERSION = 17;
     public static final int RECOMMENDED_JAVA_VERSION = 21;
 
-    public static final String PUBLISH_URL = "https://hmcl.huangyuhui.net";
-    public static final String DOWNLOAD_URL = PUBLISH_URL + "/download";
-    public static final String HMCL_UPDATE_URL = System.getProperty("hmcl.update_source.override", PUBLISH_URL + "/api/update_link");
+    public static final String PUBLISH_URL = "https://freecore.cc";
+    public static final String DOWNLOAD_URL = PUBLISH_URL;
+    /// Optional update endpoint retained as an override for downstream distributions.
+    public static final String HMCL_UPDATE_URL = System.getProperty("hmcl.update_source.override", "https://freecore.cc/api/launcher/update");
     public static final String MANUAL_UPDATE_URL = "https://github.com/HMCL-dev/HMCL/releases";
 
-    public static final String DOCS_URL = "https://docs.hmcl.net";
-    public static final String CONTACT_URL = DOCS_URL + "/help.html";
-    public static final String CHANGELOG_URL = DOCS_URL + "/changelog/";
-    public static final String EULA_URL = DOCS_URL + "/eula/hmcl.html";
-    public static final String GROUPS_URL = "https://www.bilibili.com/opus/905435541874409529";
+    public static final String DOCS_URL = "https://docs.freecore.cc";
+    public static final String CONTACT_URL = PUBLISH_URL;
+    public static final String CHANGELOG_URL = DOCS_URL + "/advanced/";
+    public static final String EULA_URL = DOCS_URL + "/rules/server-rules/";
+    public static final String GROUPS_URL = "https://qm.qq.com/";
 
     public static final String BUILD_CHANNEL = JarUtils.getAttribute("hmcl.version.type", "nightly");
     public static final String GITHUB_SHA = JarUtils.getAttribute("hmcl.version.hash", null);

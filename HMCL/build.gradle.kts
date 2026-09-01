@@ -32,7 +32,10 @@ val versionRoot = System.getenv("VERSION_ROOT") ?: projectConfig.getProperty("ve
 val microsoftAuthId = System.getenv("MICROSOFT_AUTH_ID") ?: ""
 val curseForgeApiKey = System.getenv("CURSEFORGE_API_KEY") ?: ""
 
-val launcherExe = System.getenv("HMCL_LAUNCHER_EXE") ?: ""
+val bundledFreeCoreLauncherExe = project.file("image/HMCLauncher.exe")
+val launcherExe = System.getenv("HMCL_LAUNCHER_EXE")
+    ?: bundledFreeCoreLauncherExe.takeIf { it.isFile }?.path
+    ?: ""
 
 val buildNumber = System.getenv("BUILD_NUMBER")?.toInt()
 if (buildNumber != null) {

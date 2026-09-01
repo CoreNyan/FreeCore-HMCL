@@ -39,6 +39,8 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Line;
 import javafx.util.Duration;
 import org.glavo.monetfx.ColorRole;
 import org.glavo.monetfx.ColorScheme;
@@ -49,6 +51,7 @@ import org.jackhuang.hmcl.ui.SVG;
 import org.jackhuang.hmcl.ui.WeakListenerHolder;
 import org.jackhuang.hmcl.ui.animation.ContainerAnimations;
 import org.jackhuang.hmcl.ui.animation.Motion;
+import org.jackhuang.hmcl.ui.animation.AnimationUtils;
 import org.jackhuang.hmcl.ui.animation.TransitionPane;
 import org.jackhuang.hmcl.ui.wizard.Navigation;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -71,6 +74,9 @@ final class MainWindowPane extends StackPane {
 
     /// The title bar containing page navigation state.
     private final BorderPane titleBar;
+
+    /// Animated FreeCore signal layer rendered beneath the navigation frame.
+    private @Nullable Timeline freeCoreBackdropAnimation;
 
     /// The transition container used when the title-bar state changes.
     private final TransitionPane navBarPane;
@@ -102,6 +108,7 @@ final class MainWindowPane extends StackPane {
                 Themes.colorSchemeProperty()));
 
         Region backgroundNode = createBackgroundNode();
+        Region freeCoreBackdrop = createFreeCoreBackdrop();
 
         frame = new BorderPane();
         frame.getStyleClass().add("jfx-decorator");
@@ -133,7 +140,7 @@ final class MainWindowPane extends StackPane {
 
         decorator.capableDraggingWindow(titleBar);
 
-        getChildren().setAll(backgroundNode, frame);
+        getChildren().setAll(backgroundNode, freeCoreBackdrop, frame);
     }
 
     /// Updates the content-corner shape for an edge-to-edge window state.
@@ -163,6 +170,72 @@ final class MainWindowPane extends StackPane {
             }
         });
         return backgroundNode;
+    }
+
+    /// Creates the dark grid, signal beams, and breathing glow used by the FreeCore launcher.
+    ///
+    /// The layer is deliberately mouse transparent so it never interferes with launcher controls. Its animation
+    /// follows the global launcher animation preference and degrades to a static composition when motion is disabled.
+    ///
+    /// @return the mouse-transparent FreeCore visual layer
+    private Region createFreeCoreBackdrop() {
+        Pane backdrop = new Pane();
+        backdrop.getStyleClass().add("freecore-backdrop");
+        backdrop.setMouseTransparent(true);
+
+        Circle glow = new Circle(230);
+        glow.getStyleClass().add("freecore-glow");
+        glow.setManaged(false);
+        glow.centerXProperty().bind(widthProperty().multiply(0.72));
+        glow.centerYProperty().bind(heightProperty().multiply(0.36));
+
+        Circle glowSecondary = new Circle(170);
+        glowSecondary.getStyleClass().add("freecore-glow-secondary");
+        glowSecondary.setManaged(false);
+        glowSecondary.centerXProperty().bind(widthProperty().multiply(0.28));
+        glowSecondary.centerYProperty().bind(heightProperty().multiply(0.72));
+
+        Line signal = new Line();
+        signal.getStyleClass().add("freecore-signal");
+        signal.setManaged(false);
+        signal.startXProperty().bind(widthProperty().multiply(-0.15));
+        signal.startYProperty().bind(heightProperty().multiply(0.82));
+        signal.endXProperty().bind(widthProperty().multiply(1.15));
+        signal.endYProperty().bind(heightProperty().multiply(0.18));
+
+        backdrop.getChildren().setAll(glow, glowSecondary, signal);
+
+        if (AnimationUtils.isAnimationEnabled()) {
+            freeCoreBackdropAnimation = new Timeline(
+                    new KeyFrame(Duration.ZERO,
+                            new KeyValue(glow.scaleXProperty(), 0.92),
+                            new KeyValue(glow.scaleYProperty(), 0.92),
+                            new KeyValue(glow.opacityProperty(), 0.22),
+                            new KeyValue(glowSecondary.opacityProperty(), 0.12),
+                            new KeyValue(signal.opacityProperty(), 0.0)),
+                    new KeyFrame(Duration.seconds(6),
+                            new KeyValue(glow.scaleXProperty(), 1.08, Interpolator.EASE_BOTH),
+                            new KeyValue(glow.scaleYProperty(), 1.08, Interpolator.EASE_BOTH),
+                            new KeyValue(glow.opacityProperty(), 0.38, Interpolator.EASE_BOTH),
+                            new KeyValue(glowSecondary.opacityProperty(), 0.22, Interpolator.EASE_BOTH),
+                            new KeyValue(signal.opacityProperty(), 0.45, Interpolator.EASE_BOTH),
+                            new KeyValue(signal.translateXProperty(), 24, Interpolator.EASE_BOTH)),
+                    new KeyFrame(Duration.seconds(12),
+                            new KeyValue(glow.scaleXProperty(), 0.92, Interpolator.EASE_BOTH),
+                            new KeyValue(glow.scaleYProperty(), 0.92, Interpolator.EASE_BOTH),
+                            new KeyValue(glow.opacityProperty(), 0.22, Interpolator.EASE_BOTH),
+                            new KeyValue(glowSecondary.opacityProperty(), 0.12, Interpolator.EASE_BOTH),
+                            new KeyValue(signal.opacityProperty(), 0.0, Interpolator.EASE_BOTH),
+                            new KeyValue(signal.translateXProperty(), -24, Interpolator.EASE_BOTH))
+            );
+            freeCoreBackdropAnimation.setCycleCount(Timeline.INDEFINITE);
+            freeCoreBackdropAnimation.play();
+        } else {
+            glow.setOpacity(0.22);
+            glowSecondary.setOpacity(0.12);
+        }
+
+        return backdrop;
     }
 
     /// Creates the help, minimize, and application-close buttons.

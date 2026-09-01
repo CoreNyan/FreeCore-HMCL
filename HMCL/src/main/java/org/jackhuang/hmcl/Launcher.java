@@ -31,6 +31,7 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
+import javafx.scene.text.Font;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.util.Duration;
@@ -89,6 +90,15 @@ public final class Launcher extends Application {
     @Override
     public void start(Stage primaryStage) {
         Thread.currentThread().setUncaughtExceptionHandler(CRASH_REPORTER);
+
+        // Load the same pixel display face used by freecore.cc before JavaFX CSS is applied.
+        try (var fontStream = Launcher.class.getResourceAsStream("/assets/fonts/PressStart2P.ttf")) {
+            if (fontStream != null) {
+                Font.loadFont(fontStream, 12);
+            }
+        } catch (IOException ignored) {
+            LOG.warning("Unable to load FreeCore pixel font", ignored);
+        }
 
         CookieHandler.setDefault(COOKIE_MANAGER);
 

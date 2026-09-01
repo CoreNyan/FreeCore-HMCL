@@ -885,11 +885,11 @@ public final class FXUtils {
     public static void setIcon(Stage stage) {
         String icon;
         if (OperatingSystem.CURRENT_OS == OperatingSystem.WINDOWS) {
-            icon = "/assets/img/icon.png";
+            icon = "/assets/img/freecore-icon.png";
         } else if (OperatingSystem.CURRENT_OS == OperatingSystem.MACOS) {
-            icon = "/assets/img/icon-mac.png";
+            icon = "/assets/img/freecore-icon.png";
         } else {
-            icon = "/assets/img/icon@4x.png";
+            icon = "/assets/img/freecore-icon.png";
         }
         stage.getIcons().add(newBuiltinImage(icon));
     }

@@ -49,7 +49,8 @@ public final class StyleSheets {
                 getFontStyleSheet(),
                 getThemeStyleSheet(),
                 getBrightnessStyleSheet(),
-                "/assets/css/root.css"
+                "/assets/css/root.css",
+                "/assets/css/freecore.css"
         };
         stylesheets = FXCollections.observableList(Arrays.asList(array));
 

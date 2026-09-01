@@ -33,15 +33,14 @@ import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
+import javafx.scene.control.Button;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
-import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.text.TextFlow;
 import javafx.util.Duration;
 import org.jackhuang.hmcl.Metadata;
 import org.jackhuang.hmcl.download.DefaultDependencyManager;
@@ -57,8 +56,6 @@ import org.jackhuang.hmcl.ui.Controllers;
 import org.jackhuang.hmcl.ui.FXUtils;
 import org.jackhuang.hmcl.ui.SVG;
 import org.jackhuang.hmcl.ui.animation.AnimationUtils;
-import org.jackhuang.hmcl.ui.animation.ContainerAnimations;
-import org.jackhuang.hmcl.ui.animation.TransitionPane;
 import org.jackhuang.hmcl.ui.construct.MessageDialogPane;
 import org.jackhuang.hmcl.ui.construct.TwoLineListItem;
 import org.jackhuang.hmcl.ui.decorator.DecoratorPage;
@@ -77,6 +74,8 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnmodifiableView;
 
 import java.io.IOException;
+import java.awt.Desktop;
+import java.net.URI;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
 import java.util.function.Consumer;
@@ -89,8 +88,6 @@ import static org.jackhuang.hmcl.util.logging.Logger.LOG;
 
 /// Displays the launcher home controls for the currently selected game repository.
 public final class MainPage extends StackPane implements DecoratorPage {
-    private static final String ANNOUNCEMENT = "announcement";
-
     private final ReadOnlyObjectWrapper<State> state = new ReadOnlyObjectWrapper<>();
 
     private final ObjectProperty<@Nullable HMCLGameInstance> currentGame = new SimpleObjectProperty<>(this, "currentGame");
@@ -109,7 +106,6 @@ public final class MainPage extends StackPane implements DecoratorPage {
             BindingMapping.of(GameDirectoryManager.selectedRepositoryProperty())
                     .flatMap(HMCLGameRepository::snapshotProperty);
 
-    private TransitionPane announcementPane;
     private final StackPane updatePane;
     private final JFXButton menuButton;
 
@@ -120,7 +116,10 @@ public final class MainPage extends StackPane implements DecoratorPage {
         titleNode.setPadding(new Insets(0, 0, 0, 2));
         titleNode.setAlignment(Pos.CENTER_LEFT);
 
-        ImageView titleIcon = new ImageView(FXUtils.newBuiltinImage("/assets/img/icon-title.png"));
+        ImageView titleIcon = new ImageView(FXUtils.newBuiltinImage("/assets/img/freecore-brand-transparent.png"));
+        titleIcon.setFitWidth(26);
+        titleIcon.setFitHeight(26);
+        titleIcon.setPreserveRatio(true);
         Label titleLabel = new Label(Metadata.FULL_TITLE);
         if (I18n.isUpsideDown()) {
             titleIcon.setRotate(180);
@@ -134,50 +133,58 @@ public final class MainPage extends StackPane implements DecoratorPage {
 
         setPadding(new Insets(20));
 
-        if (Metadata.isNightly() || (Metadata.isDev() && !Objects.equals(Metadata.VERSION, state().getShownTips().get(ANNOUNCEMENT)))) {
-            String title;
-            String content;
-            if (Metadata.isNightly()) {
-                title = i18n("update.channel.nightly.title");
-                content = i18n("update.channel.nightly.hint");
-            } else {
-                title = i18n("update.channel.dev.title");
-                content = i18n("update.channel.dev.hint");
-            }
+        // Keep the home page recognizable as the FreeCore client even before an instance is selected.
+        VBox brandPane = new VBox(10);
+        brandPane.setAlignment(Pos.CENTER);
+        brandPane.setMouseTransparent(true);
+        brandPane.getStyleClass().add("freecore-brand-pane");
 
-            VBox announcementCard = new VBox();
+        ImageView brandIcon = new ImageView(FXUtils.newBuiltinImage("/assets/img/freecore-brand-transparent.png"));
+        brandIcon.setFitWidth(128);
+        brandIcon.setFitHeight(128);
+        brandIcon.setPreserveRatio(true);
+        brandIcon.setMouseTransparent(true);
+        brandIcon.getStyleClass().add("freecore-brand-icon");
 
-            BorderPane titleBar = new BorderPane();
-            titleBar.getStyleClass().add("title");
-            titleBar.setLeft(new Label(title));
+        Label brandName = new Label("FreeCore");
+        brandName.setMouseTransparent(true);
+        brandName.getStyleClass().add("freecore-brand-title");
+        Label brandTagline = new Label("TRACE THE FREE  ·  ANCHOR THE CORE");
+        brandTagline.setMouseTransparent(true);
+        brandTagline.getStyleClass().add("freecore-brand-tagline");
 
-            JFXButton btnHide = new JFXButton();
-            btnHide.setOnAction(e -> {
-                announcementPane.setContent(new StackPane(), ContainerAnimations.FADE);
-                if (Metadata.isDev()) {
-                    state().getShownTips().put(ANNOUNCEMENT, Metadata.VERSION);
-                }
-            });
-            btnHide.getStyleClass().add("announcement-close-button");
-            btnHide.setGraphic(SVG.CLOSE.createIcon(20));
-            titleBar.setRight(btnHide);
+        Button docsButton = createFreeCoreLinkButton("官方文档", Metadata.DOCS_URL);
+        Button accountButton = createFreeCoreLinkButton("个人中心", "https://account.freecore.cc");
+        Button groupButton = createFreeCoreLinkButton("QQ群", "https://qm.qq.com/q/fwCibn5mjC");
+        Button websiteButton = createFreeCoreLinkButton("官网", "https://freecore.cc");
+        HBox brandLinks = new HBox(8, docsButton, accountButton, groupButton, websiteButton);
+        brandLinks.setAlignment(Pos.CENTER);
+        // Only the four controls should be hit-test targets. This prevents the centered layout
+        // container from swallowing mouse clicks while retaining a generous click target.
+        brandLinks.setPickOnBounds(false);
+        brandLinks.setMouseTransparent(false);
+        brandPane.getChildren().setAll(brandIcon, brandName, brandTagline);
 
-            TextFlow body = FXUtils.segmentToTextFlow(content, Controllers::onHyperlinkAction);
-            body.setLineSpacing(4);
+        // Keep the brand and links in one vertical flow. Previously they were two independently
+        // centered StackPane children, so the links could drift over the title on narrow windows.
+        VBox heroPane = new VBox(24, brandPane, brandLinks);
+        heroPane.setAlignment(Pos.CENTER);
+        heroPane.setPickOnBounds(false);
+        StackPane.setAlignment(heroPane, Pos.CENTER);
+        StackPane.setMargin(heroPane, new Insets(-18, 0, 42, 0));
+        getChildren().add(heroPane);
 
-            announcementCard.getChildren().setAll(titleBar, body);
-            announcementCard.setSpacing(16);
-            announcementCard.getStyleClass().addAll("card", "announcement");
-
-            VBox announcementBox = new VBox(16);
-            announcementBox.setPadding(new Insets(15));
-            announcementBox.getChildren().add(announcementCard);
-
-            announcementPane = new TransitionPane();
-            announcementPane.setContent(announcementBox, ContainerAnimations.NONE);
-
-            StackPane.setMargin(announcementPane, new Insets(-15));
-            getChildren().add(announcementPane);
+        if (AnimationUtils.isAnimationEnabled()) {
+            brandPane.setOpacity(0);
+            brandPane.setTranslateY(16);
+            new Timeline(
+                    new KeyFrame(Duration.ZERO,
+                            new KeyValue(brandPane.opacityProperty(), 0),
+                            new KeyValue(brandPane.translateYProperty(), 16)),
+                    new KeyFrame(Duration.millis(750),
+                            new KeyValue(brandPane.opacityProperty(), 1, SINE),
+                            new KeyValue(brandPane.translateYProperty(), 0, SINE))
+            ).play();
         }
 
         updatePane = new StackPane();
@@ -318,6 +325,49 @@ public final class MainPage extends StackPane implements DecoratorPage {
 
         getChildren().addAll(updatePane, launchPane);
 
+    }
+
+    /// Opens a FreeCore link from a button action using the desktop browser integration.
+    ///
+    /// @param link the absolute HTTP(S) link to open
+    private static void openFreeCoreLink(String link) {
+        Lang.thread(() -> {
+            try {
+                if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                    Desktop.getDesktop().browse(URI.create(link));
+                } else {
+                    FXUtils.openLink(link);
+                }
+            } catch (Throwable exception) {
+                FXUtils.openLink(link);
+            }
+        }, "Open FreeCore Link", true);
+    }
+
+    /// Creates a large, focusable home-page link button with a direct mouse fallback.
+    ///
+    /// @param text the visible button label
+    /// @param link the absolute HTTP(S) destination
+    /// @return a configured link button
+    private static Button createFreeCoreLinkButton(String text, String link) {
+        Button button = new Button(text);
+        button.getStyleClass().add("freecore-link-button");
+        button.setMinSize(120, 56);
+        button.setPrefSize(120, 56);
+        button.setMaxSize(120, 56);
+        button.setPickOnBounds(true);
+        button.setFocusTraversable(true);
+        button.setOnAction(event -> openFreeCoreLink(link));
+        // Some JavaFX skins do not synthesize ActionEvent while a transparent custom
+        // decorator is handling the mouse sequence; keep a direct primary-click path.
+        button.addEventFilter(MouseEvent.MOUSE_CLICKED, event -> {
+            if (event.getButton() == MouseButton.PRIMARY) {
+                // Consume the click before the skin turns it into a second ActionEvent.
+                openFreeCoreLink(link);
+                event.consume();
+            }
+        });
+        return button;
     }
 
     private void showUpdateDialog(boolean show) {
