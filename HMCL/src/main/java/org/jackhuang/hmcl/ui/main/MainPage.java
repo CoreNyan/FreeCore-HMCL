@@ -344,7 +344,7 @@ public final class MainPage extends StackPane implements DecoratorPage {
         }, "Open FreeCore Link", true);
     }
 
-    /// Creates a large, focusable home-page link button with a direct mouse fallback.
+    /// Creates a large, focusable home-page link button.
     ///
     /// @param text the visible button label
     /// @param link the absolute HTTP(S) destination
@@ -358,15 +358,6 @@ public final class MainPage extends StackPane implements DecoratorPage {
         button.setPickOnBounds(true);
         button.setFocusTraversable(true);
         button.setOnAction(event -> openFreeCoreLink(link));
-        // Some JavaFX skins do not synthesize ActionEvent while a transparent custom
-        // decorator is handling the mouse sequence; keep a direct primary-click path.
-        button.addEventFilter(MouseEvent.MOUSE_CLICKED, event -> {
-            if (event.getButton() == MouseButton.PRIMARY) {
-                // Consume the click before the skin turns it into a second ActionEvent.
-                openFreeCoreLink(link);
-                event.consume();
-            }
-        });
         return button;
     }
 
