@@ -63,35 +63,9 @@ public final class AuthlibInjectorServers implements Validation {
         }
     }
 
+    /// Skips legacy detached auth-server configuration for the FreeCore-only launcher.
     public static void init() {
-        Path configLocation;
-        Path jarPath = JarUtils.thisJarPath();
-        if (jarPath != null && Files.isRegularFile(jarPath) && Files.isWritable(jarPath)) {
-            configLocation = jarPath.getParent().resolve(CONFIG_FILENAME);
-        } else {
-            configLocation = Paths.get(CONFIG_FILENAME);
-        }
-
-        if (SettingsManager.isNewlyCreated() && Files.exists(configLocation)) {
-            AuthlibInjectorServers configInstance;
-            try {
-                configInstance = JsonUtils.fromJsonFile(configLocation, AuthlibInjectorServers.class);
-            } catch (IOException | JsonParseException e) {
-                LOG.warning("Malformed authlib-injectors.json", e);
-                return;
-            }
-
-            if (!configInstance.urls.isEmpty()) {
-                settings().preferredLoginTypeProperty().set(Accounts.getLoginType(Accounts.FACTORY_AUTHLIB_INJECTOR));
-                for (String url : configInstance.urls) {
-                    Task.supplyAsync(Schedulers.io(), () -> AuthlibInjectorServer.locateServer(url))
-                            .thenAcceptAsync(Schedulers.javafx(), server -> {
-                                getAuthlibInjectorServers().add(server);
-                                servers.add(server);
-                            })
-                            .start();
-                }
-            }
-        }
+        // FreeCore builds use the built-in authentication endpoint exclusively.
+        // Detached HMCL auth-server lists are intentionally ignored.
     }
 }

@@ -168,6 +168,10 @@ public final class AccountListItemSkin extends SkinBase<AccountListItem> {
         btnRemove.setOnAction(e -> Controllers.confirm(i18n("button.remove.confirm"), i18n("button.remove"), skinnable::remove, null));
         BorderPane.setAlignment(btnRemove, Pos.CENTER);
         FXUtils.installFastTooltip(btnRemove, i18n("button.delete"));
+        if (Accounts.isProtectedAccount(skinnable.getAccount())) {
+            btnRemove.setVisible(false);
+            btnRemove.setManaged(false);
+        }
         right.getChildren().add(btnRemove);
         root.setRight(right);
 

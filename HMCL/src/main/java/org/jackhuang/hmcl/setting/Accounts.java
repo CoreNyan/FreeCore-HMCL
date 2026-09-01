@@ -63,12 +63,23 @@ public final class Accounts {
 
     private static final AuthlibInjectorArtifactProvider AUTHLIB_INJECTOR_DOWNLOADER = createAuthlibInjectorArtifactProvider();
 
+    /// The authentication endpoint used by the FreeCore launcher.
+    public static final String FREECORE_AUTH_SERVER_URL = "https://account.freecore.cc/api/yggdrasil/";
+
+    /// The fixed FreeCore authentication server. It is always available and cannot be removed from the launcher.
+    public static final AuthlibInjectorServer FREECORE_AUTH_SERVER = new AuthlibInjectorServer(FREECORE_AUTH_SERVER_URL);
+
     public static final OAuthServer.Factory OAUTH_CALLBACK = new OAuthServer.Factory();
 
     public static final OfflineAccountFactory FACTORY_OFFLINE = new OfflineAccountFactory(AUTHLIB_INJECTOR_DOWNLOADER);
     public static final AuthlibInjectorAccountFactory FACTORY_AUTHLIB_INJECTOR = new AuthlibInjectorAccountFactory(AUTHLIB_INJECTOR_DOWNLOADER, Accounts::getOrCreateAuthlibInjectorServer);
     public static final MicrosoftAccountFactory FACTORY_MICROSOFT = new MicrosoftAccountFactory(new MicrosoftService(OAUTH_CALLBACK));
-    public static final List<AccountFactory<?>> FACTORIES = List.of(FACTORY_OFFLINE, FACTORY_MICROSOFT, FACTORY_AUTHLIB_INJECTOR);
+    /// The account factory bound to the FreeCore authentication server.
+    public static final BoundAuthlibInjectorAccountFactory FACTORY_FREECORE =
+            new BoundAuthlibInjectorAccountFactory(AUTHLIB_INJECTOR_DOWNLOADER, FREECORE_AUTH_SERVER);
+
+    /// Account creation methods exposed by the FreeCore launcher.
+    public static final List<AccountFactory<?>> FACTORIES = List.of(FACTORY_FREECORE);
 
     // ==== login type / account factory mapping ====
     private static final Map<String, AccountFactory<?>> type2factory = new HashMap<>();
@@ -78,6 +89,7 @@ public final class Accounts {
         type2factory.put("offline", FACTORY_OFFLINE);
         type2factory.put("authlibInjector", FACTORY_AUTHLIB_INJECTOR);
         type2factory.put("microsoft", FACTORY_MICROSOFT);
+        type2factory.put("freecore", FACTORY_FREECORE);
 
         type2factory.forEach((type, factory) -> factory2type.put(factory, type));
     }
@@ -85,6 +97,9 @@ public final class Accounts {
     public static String getLoginType(AccountFactory<?> factory) {
         String type = factory2type.get(factory);
         if (type != null) return type;
+
+        if (factory == FACTORY_FREECORE)
+            return "freecore";
 
         if (factory instanceof BoundAuthlibInjectorAccountFactory) {
             return factory2type.get(FACTORY_AUTHLIB_INJECTOR);
@@ -107,7 +122,7 @@ public final class Accounts {
         if (account instanceof OfflineAccount)
             return FACTORY_OFFLINE;
         else if (account instanceof AuthlibInjectorAccount)
-            return FACTORY_AUTHLIB_INJECTOR;
+            return isFreeCoreAccount(account) ? FACTORY_FREECORE : FACTORY_AUTHLIB_INJECTOR;
         else if (account instanceof MicrosoftAccount)
             return FACTORY_MICROSOFT;
         else
@@ -223,7 +238,28 @@ public final class Accounts {
 
     /// Returns whether the given account may be removed from its current account files.
     public static boolean canRemoveAccount(Account account) {
-        return !isAccountFilesReadOnly(account);
+        return !isProtectedAccount(account) && !isAccountFilesReadOnly(account);
+    }
+
+    /// Returns whether the account belongs to the fixed FreeCore authentication server.
+    public static boolean isProtectedAccount(Account account) {
+        return isFreeCoreAccount(account);
+    }
+
+    /// Returns whether an account uses the fixed FreeCore authentication server.
+    public static boolean isFreeCoreAccount(Account account) {
+        return account instanceof AuthlibInjectorAccount authlibAccount
+                && isFreeCoreServer(authlibAccount.getServer());
+    }
+
+    /// Returns whether an authentication server is the fixed FreeCore server.
+    public static boolean isFreeCoreServer(AuthlibInjectorServer server) {
+        return normalizeServerUrl(server.getUrl()).equals(normalizeServerUrl(FREECORE_AUTH_SERVER_URL));
+    }
+
+    /// Compares server URLs without considering a trailing slash.
+    private static String normalizeServerUrl(String url) {
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 
     /// Returns whether the given account may be moved between local and user account files.
@@ -271,7 +307,12 @@ public final class Accounts {
 
         try {
             AccountID accountID = Account.readAccountID(record);
-            return factory.fromStorage(record, SettingsManager.getAccountPrivateData(accountID, portable));
+            Account account = factory.fromStorage(record, SettingsManager.getAccountPrivateData(accountID, portable));
+            if (!isFreeCoreAccount(account)) {
+                LOG.info("Ignoring account outside the FreeCore authentication server: " + describeAccountRecord(record));
+                return null;
+            }
+            return account;
         } catch (Exception e) {
             LOG.warning("Failed to load account: " + describeAccountRecord(record), e);
             return null;
@@ -308,6 +349,9 @@ public final class Accounts {
         if (accountIDNormalization.sharedChanged()) {
             SettingsManager.saveUserGameAccountMetadataRecords();
         }
+
+        // Keep only the built-in FreeCore server so users cannot switch to another authentication backend.
+        getAuthlibInjectorServers().setAll(FREECORE_AUTH_SERVER);
 
         // load accounts
         Account selected = null;
@@ -467,6 +511,9 @@ public final class Accounts {
     }
 
     private static AuthlibInjectorServer getOrCreateAuthlibInjectorServer(String url) {
+        if (normalizeServerUrl(url).equals(normalizeServerUrl(FREECORE_AUTH_SERVER_URL))) {
+            return FREECORE_AUTH_SERVER;
+        }
         return getAuthlibInjectorServers().stream()
                 .filter(server -> url.equals(server.getUrl()))
                 .findFirst()
@@ -494,6 +541,7 @@ public final class Accounts {
 
     // ==== Login type name i18n ===
     private static final Map<AccountFactory<?>, String> unlocalizedLoginTypeNames = mapOf(
+            pair(Accounts.FACTORY_FREECORE, "account.methods.freecore"),
             pair(Accounts.FACTORY_OFFLINE, "account.methods.offline"),
             pair(Accounts.FACTORY_AUTHLIB_INJECTOR, "account.methods.authlib_injector"),
             pair(Accounts.FACTORY_MICROSOFT, "account.methods.microsoft"));

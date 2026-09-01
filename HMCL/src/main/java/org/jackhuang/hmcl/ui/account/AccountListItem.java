@@ -182,7 +182,12 @@ public class AccountListItem extends RadioButton {
                 });
     }
 
+    /// Removes this account unless it is the protected FreeCore account.
     public void remove() {
+        if (Accounts.isProtectedAccount(account)) {
+            Controllers.showToast(i18n("account.freecore.protected"));
+            return;
+        }
         if (!Accounts.canRemoveAccount(account)) {
             Controllers.confirmBackupAndOverwrite(i18n("account.storage.read_only"), () -> {
                 Accounts.forceOverwriteAccountFiles(account);

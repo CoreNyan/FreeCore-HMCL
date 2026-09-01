@@ -96,18 +96,9 @@ public class CreateAccountPane extends JFXDialogLayout implements DialogAware {
 
     public CreateAccountPane(AccountFactory<?> factory) {
         if (factory == null) {
-            if (AccountListPage.RESTRICTED.get()) {
-                showMethodSwitcher = false;
-                factory = Accounts.FACTORY_MICROSOFT;
-            } else {
-                showMethodSwitcher = true;
-                String preferred = settings().preferredLoginTypeProperty().get();
-                try {
-                    factory = Accounts.getAccountFactory(preferred);
-                } catch (IllegalArgumentException e) {
-                    factory = Accounts.FACTORY_OFFLINE;
-                }
-            }
+            // FreeCore is the only supported authentication backend in this build.
+            showMethodSwitcher = false;
+            factory = Accounts.FACTORY_FREECORE;
         } else {
             showMethodSwitcher = false;
         }
