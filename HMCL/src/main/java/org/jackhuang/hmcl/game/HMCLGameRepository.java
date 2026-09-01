@@ -276,7 +276,15 @@ public final class HMCLGameRepository extends DefaultGameRepository {
 
         String runningDirectory = selectedRunningDirectory(localSetting, useInstanceRunningDirectory);
         if (StringUtils.isBlank(runningDirectory)) {
-            return useInstanceRunningDirectory ? instanceRoot : getBaseDirectory();
+            // Older/customized instances may predate the per-instance settings file. If the
+            // conventional instance root already contains instance-owned game data, preserve
+            // that layout instead of silently redirecting mods and configs to the shared base.
+            boolean hasInstanceContent = Files.isDirectory(instanceRoot.resolve("mods"))
+                    || Files.isDirectory(instanceRoot.resolve("config"))
+                    || Files.isDirectory(instanceRoot.resolve("resourcepacks"))
+                    || Files.isDirectory(instanceRoot.resolve("shaderpacks"))
+                    || Files.isDirectory(instanceRoot.resolve("saves"));
+            return useInstanceRunningDirectory || hasInstanceContent ? instanceRoot : getBaseDirectory();
         }
 
         try {
