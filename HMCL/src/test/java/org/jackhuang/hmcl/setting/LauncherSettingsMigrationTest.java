@@ -41,6 +41,32 @@ import static org.junit.jupiter.api.Assertions.*;
 /// Tests for legacy config migration into current launcher settings.
 @NotNullByDefault
 public final class LauncherSettingsMigrationTest {
+    /// Tests that newly created launcher settings explicitly default to dark mode.
+    @Test
+    public void defaultsToDarkThemeMode() {
+        LauncherSettings launcherSettings = new LauncherSettings();
+
+        assertEquals("dark", launcherSettings.themeBrightnessModeProperty().get());
+        assertTrue(launcherSettings.getThemeAppearanceOverrides().contains(
+                LauncherSettings.THEME_APPEARANCE_BRIGHTNESS_MODE));
+    }
+
+    /// Tests that a stored explicit appearance configuration replaces the new default override set.
+    @Test
+    public void preservesStoredThemeModeOverrides() {
+        LauncherSettings launcherSettings = Objects.requireNonNull(LauncherSettings.fromJson(
+                JsonParser.parseString("""
+                        {
+                          "themeBrightnessMode": "auto",
+                          "themeAppearanceOverrides": []
+                        }
+                        """).getAsJsonObject()));
+
+        assertEquals("auto", launcherSettings.themeBrightnessModeProperty().get());
+        assertFalse(launcherSettings.getThemeAppearanceOverrides().contains(
+                LauncherSettings.THEME_APPEARANCE_BRIGHTNESS_MODE));
+    }
+
     /// Returns the migrated account ID generated for a legacy offline profile name.
     private static String offlineAccountID(String profileName) {
         return accountIDFromLegacyIdentifier(profileName + ":" + profileName);

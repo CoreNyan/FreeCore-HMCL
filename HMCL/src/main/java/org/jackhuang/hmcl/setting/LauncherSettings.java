@@ -121,6 +121,7 @@ public final class LauncherSettings extends ObservableSetting implements JsonSch
 
     /// Creates empty launcher settings using current defaults.
     public LauncherSettings() {
+        themeAppearanceOverrides.add(THEME_APPEARANCE_BRIGHTNESS_MODE);
         tracker.markDirty(schema);
         register();
     }
