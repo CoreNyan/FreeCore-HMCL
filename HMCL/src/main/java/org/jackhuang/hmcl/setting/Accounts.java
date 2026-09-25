@@ -37,6 +37,7 @@ import org.jackhuang.hmcl.game.OAuthServer;
 import org.jackhuang.hmcl.task.Schedulers;
 import org.jackhuang.hmcl.util.gson.JsonUtils;
 import org.jackhuang.hmcl.util.io.JarUtils;
+import org.jackhuang.hmcl.upgrade.FreeCoreBootstrap;
 import org.jackhuang.hmcl.util.skin.InvalidSkinException;
 import org.jetbrains.annotations.Nullable;
 
@@ -64,7 +65,7 @@ public final class Accounts {
     private static final AuthlibInjectorArtifactProvider AUTHLIB_INJECTOR_DOWNLOADER = createAuthlibInjectorArtifactProvider();
 
     /// The authentication endpoint used by the FreeCore launcher.
-    public static final String FREECORE_AUTH_SERVER_URL = "https://account.lynnhma.xyz/api/yggdrasil/";
+    public static final String FREECORE_AUTH_SERVER_URL = FreeCoreBootstrap.getDefaultAuthServerUrl();
 
     /// The previous FreeCore authentication endpoint migrated to [#FREECORE_AUTH_SERVER_URL].
     private static final String LEGACY_FREECORE_AUTH_SERVER_URL = "https://account.freecore.cc/api/yggdrasil/";
@@ -259,6 +260,7 @@ public final class Accounts {
     public static boolean isFreeCoreServer(AuthlibInjectorServer server) {
         String normalizedUrl = normalizeServerUrl(server.getUrl());
         return normalizedUrl.equals(normalizeServerUrl(FREECORE_AUTH_SERVER_URL))
+                || normalizedUrl.equals(normalizeServerUrl(FreeCoreBootstrap.BUILTIN_AUTH_SERVER_URL))
                 || normalizedUrl.equals(normalizeServerUrl(LEGACY_FREECORE_AUTH_SERVER_URL));
     }
 
@@ -518,6 +520,7 @@ public final class Accounts {
 
     private static AuthlibInjectorServer getOrCreateAuthlibInjectorServer(String url) {
         if (normalizeServerUrl(url).equals(normalizeServerUrl(FREECORE_AUTH_SERVER_URL))
+                || normalizeServerUrl(url).equals(normalizeServerUrl(FreeCoreBootstrap.BUILTIN_AUTH_SERVER_URL))
                 || normalizeServerUrl(url).equals(normalizeServerUrl(LEGACY_FREECORE_AUTH_SERVER_URL))) {
             return FREECORE_AUTH_SERVER;
         }

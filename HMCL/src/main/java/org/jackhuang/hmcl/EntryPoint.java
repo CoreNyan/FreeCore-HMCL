@@ -24,6 +24,7 @@ import org.jackhuang.hmcl.java.JavaRuntime;
 import org.jackhuang.hmcl.util.io.FileUtils;
 import org.jackhuang.hmcl.util.io.JarUtils;
 import org.jackhuang.hmcl.util.platform.OperatingSystem;
+import org.jackhuang.hmcl.upgrade.FreeCoreBootstrap;
 
 import javax.swing.JOptionPane;
 import java.io.IOException;
@@ -49,6 +50,11 @@ public final class EntryPoint {
 
         createHMCLDirectories();
         LOG.start(Metadata.HMCL_LOCAL_HOME.resolve("logs"));
+
+        if (!FreeCoreBootstrap.run()) {
+            exit(0);
+            return;
+        }
 
         checkWine();
 

@@ -297,7 +297,7 @@ public final class LauncherSettings extends ObservableSetting implements JsonSch
 
     /// The configured theme brightness mode identifier.
     @SerializedName("themeBrightnessMode")
-    private final StringProperty themeBrightnessMode = new SimpleStringProperty("auto");
+    private final StringProperty themeBrightnessMode = new SimpleStringProperty("dark");
 
     /// Returns the theme brightness mode property.
     public StringProperty themeBrightnessModeProperty() {
