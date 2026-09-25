@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Predicate;
 
 import static org.jackhuang.hmcl.util.logging.Logger.LOG;
 
@@ -597,6 +598,73 @@ public final class SettingsManager {
                 : List.of(userGameAccountPrivateData(), gameAccountPrivateData());
         @Nullable JsonObject privateData = AccountPrivateData.findPrivateData(accountID, privateDataStores);
         return privateData != null ? privateData : new JsonObject();
+    }
+
+    /// Removes matching account metadata and private credentials from both account stores.
+    ///
+    /// This operation is used for the fixed FreeCore channel only. Player-created authentication
+    /// channels and their accounts remain unchanged because the caller supplies an exact metadata predicate.
+    ///
+    /// @param predicate identifies account metadata records owned by the fixed FreeCore channel
+    /// @return the number of removed account records
+    /// @throws IOException if any updated account file cannot be safely written
+    static int removeAccountRecords(Predicate<JsonObject> predicate) throws IOException {
+        List<JsonObject> localRecords = new ArrayList<>(gameAccounts().getAccounts());
+        List<JsonObject> userRecords = new ArrayList<>(userGameAccounts().getAccounts());
+        List<AccountID> removedAccountIDs = new ArrayList<>();
+
+        int removed = removeMatchingAccountRecords(localRecords, predicate, removedAccountIDs)
+                + removeMatchingAccountRecords(userRecords, predicate, removedAccountIDs);
+        if (removed == 0) {
+            return 0;
+        }
+
+        AccountPrivateData localPrivateData = new AccountPrivateData();
+        localPrivateData.replaceWith(gameAccountPrivateData());
+        AccountPrivateData userPrivateData = new AccountPrivateData();
+        userPrivateData.replaceWith(userGameAccountPrivateData());
+        for (AccountID accountID : removedAccountIDs) {
+            localPrivateData.removePrivateData(accountID);
+            userPrivateData.removePrivateData(accountID);
+        }
+
+        AccountMetadataStore localMetadata = gameAccounts().copyWithRecords(localRecords);
+        AccountMetadataStore userMetadata = userGameAccounts().copyWithRecords(userRecords);
+
+        // Credentials are written first so removed metadata can never retain usable stale tokens.
+        GAME_ACCOUNT_PRIVATE_DATA_FILE.backupAndOverwriteSync(localPrivateData);
+        USER_GAME_ACCOUNT_PRIVATE_DATA_FILE.backupAndOverwriteSync(userPrivateData);
+        GAME_ACCOUNTS_FILE.backupAndOverwriteSync(localMetadata);
+        USER_GAME_ACCOUNTS_FILE.backupAndOverwriteSync(userMetadata);
+
+        gameAccountPrivateData().replaceWith(localPrivateData);
+        userGameAccountPrivateData().replaceWith(userPrivateData);
+        gameAccounts().getAccounts().setAll(localRecords);
+        userGameAccounts().getAccounts().setAll(userRecords);
+        gameAccountsAccess = SettingFileAccess.READ_WRITE;
+        userGameAccountsAccess = SettingFileAccess.READ_WRITE;
+        gameAccountPrivateDataAccess = SettingFileAccess.READ_WRITE;
+        userGameAccountPrivateDataAccess = SettingFileAccess.READ_WRITE;
+        return removed;
+    }
+
+    /// Removes matching metadata records while collecting their account IDs for credential deletion.
+    private static int removeMatchingAccountRecords(
+            List<JsonObject> records,
+            Predicate<JsonObject> predicate,
+            List<AccountID> removedAccountIDs) {
+        int originalSize = records.size();
+        records.removeIf(record -> {
+            if (!predicate.test(record)) {
+                return false;
+            }
+            @Nullable AccountID accountID = Account.getAccountID(record);
+            if (accountID != null && !removedAccountIDs.contains(accountID)) {
+                removedAccountIDs.add(accountID);
+            }
+            return true;
+        });
+        return originalSize - records.size();
     }
 
     /// Updates account metadata and private data, then saves the changed files.

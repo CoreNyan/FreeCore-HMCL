@@ -43,7 +43,9 @@ import org.jackhuang.hmcl.theme.Themes;
 import org.jackhuang.hmcl.ui.Controllers;
 import org.jackhuang.hmcl.ui.FXUtils;
 import org.jackhuang.hmcl.ui.WindowsNativeUtils;
+import org.jackhuang.hmcl.ui.account.CreateAccountPane;
 import org.jackhuang.hmcl.ui.animation.AnimationUtils;
+import org.jackhuang.hmcl.upgrade.FreeCoreBootstrap;
 import org.jackhuang.hmcl.upgrade.UpdateHandler;
 import org.jackhuang.hmcl.util.*;
 import org.jackhuang.hmcl.util.io.FileUtils;
@@ -156,6 +158,10 @@ public final class Launcher extends Application {
 
                 WindowsNativeUtils.installWindowsAppUserModelRelaunchProperties(primaryStage);
                 primaryStage.show();
+
+                if (FreeCoreBootstrap.consumeAuthenticationReloginRequired()) {
+                    Controllers.dialogLater(new CreateAccountPane(Accounts.FACTORY_FREECORE));
+                }
             });
         } catch (Throwable e) {
             CRASH_REPORTER.uncaughtException(Thread.currentThread(), e);

@@ -43,8 +43,10 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.net.ssl.SSLException;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.stream.Stream;
 
 import static java.util.stream.Collectors.toList;
 import static javafx.collections.FXCollections.observableArrayList;
@@ -66,9 +68,6 @@ public final class Accounts {
 
     /// The authentication endpoint used by the FreeCore launcher.
     public static final String FREECORE_AUTH_SERVER_URL = FreeCoreBootstrap.getDefaultAuthServerUrl();
-
-    /// The previous FreeCore authentication endpoint migrated to [#FREECORE_AUTH_SERVER_URL].
-    private static final String LEGACY_FREECORE_AUTH_SERVER_URL = "https://account.freecore.cc/api/yggdrasil/";
 
     /// The fixed FreeCore authentication server. It is always available and cannot be removed from the launcher.
     public static final AuthlibInjectorServer FREECORE_AUTH_SERVER = new AuthlibInjectorServer(FREECORE_AUTH_SERVER_URL);
@@ -258,10 +257,7 @@ public final class Accounts {
 
     /// Returns whether an authentication server is the fixed FreeCore server.
     public static boolean isFreeCoreServer(AuthlibInjectorServer server) {
-        String normalizedUrl = normalizeServerUrl(server.getUrl());
-        return normalizedUrl.equals(normalizeServerUrl(FREECORE_AUTH_SERVER_URL))
-                || normalizedUrl.equals(normalizeServerUrl(FreeCoreBootstrap.BUILTIN_AUTH_SERVER_URL))
-                || normalizedUrl.equals(normalizeServerUrl(LEGACY_FREECORE_AUTH_SERVER_URL));
+        return normalizeServerUrl(server.getUrl()).equals(normalizeServerUrl(FREECORE_AUTH_SERVER_URL));
     }
 
     /// Compares server URLs without considering a trailing slash.
@@ -357,8 +353,23 @@ public final class Accounts {
             SettingsManager.saveUserGameAccountMetadataRecords();
         }
 
-        // Replace the old built-in endpoint and retain the new one while preserving user-added servers.
-        getAuthlibInjectorServers().removeIf(Accounts::isFreeCoreServer);
+        Set<String> managedFreeCoreServerUrls = getStoredFreeCoreServerUrls();
+        managedFreeCoreServerUrls.add(normalizeServerUrl(FREECORE_AUTH_SERVER_URL));
+        @Nullable String previousAuthServerUrl = FreeCoreBootstrap.getPreviousAuthServerUrl();
+        if (previousAuthServerUrl != null) {
+            managedFreeCoreServerUrls.add(normalizeServerUrl(previousAuthServerUrl));
+        }
+
+        boolean authenticationServerChanged = FreeCoreBootstrap.isAuthServerChanged()
+                || FreeCoreBootstrap.isRemoteConfigurationLoaded()
+                && hasStoredFreeCoreAccountForDifferentServer();
+        if (authenticationServerChanged) {
+            migrateFixedFreeCoreAuthenticationChannel();
+        }
+
+        // Replace only the managed FreeCore channel; player-created channels remain untouched.
+        getAuthlibInjectorServers().removeIf(
+                server -> managedFreeCoreServerUrls.contains(normalizeServerUrl(server.getUrl())));
         getAuthlibInjectorServers().add(0, FREECORE_AUTH_SERVER);
 
         // load accounts
@@ -519,9 +530,7 @@ public final class Accounts {
     }
 
     private static AuthlibInjectorServer getOrCreateAuthlibInjectorServer(String url) {
-        if (normalizeServerUrl(url).equals(normalizeServerUrl(FREECORE_AUTH_SERVER_URL))
-                || normalizeServerUrl(url).equals(normalizeServerUrl(FreeCoreBootstrap.BUILTIN_AUTH_SERVER_URL))
-                || normalizeServerUrl(url).equals(normalizeServerUrl(LEGACY_FREECORE_AUTH_SERVER_URL))) {
+        if (normalizeServerUrl(url).equals(normalizeServerUrl(FREECORE_AUTH_SERVER_URL))) {
             return FREECORE_AUTH_SERVER;
         }
         return getAuthlibInjectorServers().stream()
@@ -532,6 +541,41 @@ public final class Accounts {
                     getAuthlibInjectorServers().add(server);
                     return server;
                 });
+    }
+
+    /// Returns the authentication URLs referenced by persisted fixed-channel accounts.
+    private static Set<String> getStoredFreeCoreServerUrls() {
+        Set<String> serverUrls = new HashSet<>();
+        Stream.concat(getAccountMetadataRecords().stream(), getUserAccountMetadataRecords().stream())
+                .filter(record -> "freecore".equals(JsonUtils.getString(record, "type")))
+                .map(record -> JsonUtils.getString(record, "serverBaseURL"))
+                .filter(Objects::nonNull)
+                .map(Accounts::normalizeServerUrl)
+                .forEach(serverUrls::add);
+        return serverUrls;
+    }
+
+    /// Returns whether fixed-channel accounts target an endpoint other than the current repository URL.
+    private static boolean hasStoredFreeCoreAccountForDifferentServer() {
+        return Stream.concat(getAccountMetadataRecords().stream(), getUserAccountMetadataRecords().stream())
+                .filter(record -> "freecore".equals(JsonUtils.getString(record, "type")))
+                .map(record -> JsonUtils.getString(record, "serverBaseURL"))
+                .anyMatch(url -> url == null
+                        || !normalizeServerUrl(url).equals(normalizeServerUrl(FREECORE_AUTH_SERVER_URL)));
+    }
+
+    /// Clears only fixed-channel accounts and credentials before applying a repository URL change.
+    private static void migrateFixedFreeCoreAuthenticationChannel() {
+        try {
+            int removedAccounts = SettingsManager.removeAccountRecords(
+                    record -> "freecore".equals(JsonUtils.getString(record, "type")));
+            FreeCoreBootstrap.markAuthenticationServerMigrationApplied();
+            FreeCoreBootstrap.requireAuthenticationRelogin();
+            LOG.info("Applied updated FreeCore authentication endpoint; removed "
+                    + removedAccounts + " fixed-channel account(s)");
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to migrate the fixed FreeCore authentication channel", e);
+        }
     }
 
     /**

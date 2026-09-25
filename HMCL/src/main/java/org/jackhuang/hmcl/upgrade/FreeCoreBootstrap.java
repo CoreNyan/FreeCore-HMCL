@@ -47,6 +47,7 @@ import java.awt.Window;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -74,6 +75,10 @@ public final class FreeCoreBootstrap {
     private static final String REMOTE_CONFIG_URL =
             "https://raw.githubusercontent.com/CoreNyan/FreeCore-HMCL/main/freecore-launcher.json";
 
+    /// Local state recording the last repository authentication URL applied to account storage.
+    private static final Path REMOTE_CONFIG_STATE_FILE =
+            Metadata.HMCL_LOCAL_HOME.resolve("state").resolve("freecore-remote-config.json");
+
     /// Windows executable asset required in every launcher release.
     private static final String WINDOWS_ASSET_NAME = "FreeCore-Launcher.exe";
 
@@ -85,6 +90,18 @@ public final class FreeCoreBootstrap {
 
     /// Current configured authentication endpoint.
     private static volatile String defaultAuthServerUrl = BUILTIN_AUTH_SERVER_URL;
+
+    /// Previous fixed authentication endpoint when the repository configuration changed.
+    private static volatile @Nullable String previousAuthServerUrl;
+
+    /// Whether the fixed FreeCore authentication endpoint changed since it was last applied.
+    private static volatile boolean authServerChanged;
+
+    /// Whether the repository configuration was successfully loaded during this startup.
+    private static volatile boolean remoteConfigurationLoaded;
+
+    /// Whether the JavaFX application must open the fixed FreeCore login dialog.
+    private static volatile boolean authenticationReloginRequired;
 
     /// Prevents construction of the startup utility.
     private FreeCoreBootstrap() {
@@ -117,11 +134,48 @@ public final class FreeCoreBootstrap {
         return defaultAuthServerUrl;
     }
 
+    /// Returns the previous fixed authentication endpoint when a migration is pending.
+    public static @Nullable String getPreviousAuthServerUrl() {
+        return previousAuthServerUrl;
+    }
+
+    /// Returns whether the repository changed the fixed FreeCore authentication endpoint.
+    public static boolean isAuthServerChanged() {
+        return authServerChanged;
+    }
+
+    /// Returns whether this startup successfully loaded the repository configuration.
+    public static boolean isRemoteConfigurationLoaded() {
+        return remoteConfigurationLoaded;
+    }
+
+    /// Requests that the application open the fixed FreeCore login dialog after startup.
+    public static void requireAuthenticationRelogin() {
+        authenticationReloginRequired = true;
+    }
+
+    /// Consumes the pending request to open the fixed FreeCore login dialog.
+    public static boolean consumeAuthenticationReloginRequired() {
+        boolean required = authenticationReloginRequired;
+        authenticationReloginRequired = false;
+        return required;
+    }
+
+    /// Records that account storage has been migrated to the current repository authentication URL.
+    ///
+    /// @throws IOException if the applied configuration state cannot be persisted
+    public static void markAuthenticationServerMigrationApplied() throws IOException {
+        writeRemoteConfigurationState(defaultAuthServerUrl);
+        previousAuthServerUrl = null;
+        authServerChanged = false;
+    }
+
     /// Downloads and validates the repository configuration, retaining built-in defaults on failure.
     private static void refreshRemoteConfiguration() {
+        remoteConfigurationLoaded = false;
         try {
             JsonObject root = JsonUtils.fromNonNullJson(
-                    HttpRequest.GET(REMOTE_CONFIG_URL)
+                    HttpRequest.GET(REMOTE_CONFIG_URL + "?timestamp=" + System.currentTimeMillis())
                             .header("Cache-Control", "no-cache")
                             .retry(2)
                             .getString(),
@@ -132,10 +186,91 @@ public final class FreeCoreBootstrap {
             }
 
             defaultAuthServerUrl = normalizeAuthServerUrl(configuredUrl);
+            remoteConfigurationLoaded = true;
+            updateRemoteConfigurationState(defaultAuthServerUrl);
             LOG.info("Loaded FreeCore remote configuration: defaultAuthServerUrl=" + defaultAuthServerUrl);
         } catch (Exception e) {
-            defaultAuthServerUrl = BUILTIN_AUTH_SERVER_URL;
-            LOG.warning("Failed to load FreeCore remote configuration; using built-in defaults", e);
+            previousAuthServerUrl = null;
+            authServerChanged = false;
+            try {
+                defaultAuthServerUrl = readAppliedAuthenticationServerUrl();
+                LOG.warning("Failed to load FreeCore remote configuration; using the last applied URL", e);
+            } catch (Exception stateError) {
+                defaultAuthServerUrl = BUILTIN_AUTH_SERVER_URL;
+                stateError.addSuppressed(e);
+                LOG.warning("Failed to load FreeCore remote configuration and local state; "
+                        + "using the built-in URL", stateError);
+            }
+        }
+    }
+
+    /// Compares the fetched URL with the last successfully applied repository configuration.
+    private static void updateRemoteConfigurationState(String configuredUrl) {
+        if (!Files.isRegularFile(REMOTE_CONFIG_STATE_FILE)) {
+            try {
+                writeRemoteConfigurationState(configuredUrl);
+            } catch (IOException e) {
+                LOG.warning("Failed to initialize FreeCore remote configuration state", e);
+            }
+            return;
+        }
+
+        try {
+            String normalizedAppliedUrl = readAppliedAuthenticationServerUrl();
+            if (!normalizedAppliedUrl.equals(configuredUrl)) {
+                previousAuthServerUrl = normalizedAppliedUrl;
+                authServerChanged = true;
+                LOG.info("FreeCore authentication endpoint changed: "
+                        + normalizedAppliedUrl + " -> " + configuredUrl);
+            }
+        } catch (Exception e) {
+            LOG.warning("Failed to read FreeCore remote configuration state", e);
+            try {
+                writeRemoteConfigurationState(configuredUrl);
+            } catch (IOException writeError) {
+                LOG.warning("Failed to repair FreeCore remote configuration state", writeError);
+            }
+        }
+    }
+
+    /// Reads and validates the last repository authentication URL applied to account storage.
+    ///
+    /// @return the normalized authentication URL from local state
+    /// @throws IOException if the state file cannot be read
+    /// @throws JsonParseException if the state does not contain a valid authentication URL
+    private static String readAppliedAuthenticationServerUrl() throws IOException {
+        JsonObject state = JsonUtils.fromNonNullJson(
+                Files.readString(REMOTE_CONFIG_STATE_FILE, StandardCharsets.UTF_8),
+                JsonObject.class);
+        @Nullable String appliedUrl = JsonUtils.getString(state, "defaultAuthServerUrl");
+        if (appliedUrl == null || appliedUrl.isBlank()) {
+            throw new JsonParseException("defaultAuthServerUrl is missing from local state");
+        }
+        return normalizeAuthServerUrl(appliedUrl);
+    }
+
+    /// Atomically persists the repository authentication URL applied to local account storage.
+    private static void writeRemoteConfigurationState(String configuredUrl) throws IOException {
+        Files.createDirectories(REMOTE_CONFIG_STATE_FILE.getParent());
+        JsonObject state = new JsonObject();
+        state.addProperty("defaultAuthServerUrl", configuredUrl);
+        Path temporary = REMOTE_CONFIG_STATE_FILE.resolveSibling(
+                REMOTE_CONFIG_STATE_FILE.getFileName() + ".tmp");
+        Files.writeString(
+                temporary,
+                JsonUtils.GSON.toJson(state),
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE);
+        try {
+            Files.move(
+                    temporary,
+                    REMOTE_CONFIG_STATE_FILE,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(temporary, REMOTE_CONFIG_STATE_FILE, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
