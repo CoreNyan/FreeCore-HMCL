@@ -63,9 +63,38 @@ public final class AuthlibInjectorServers implements Validation {
         }
     }
 
-    /// Skips legacy detached auth-server configuration for the FreeCore-only launcher.
+    /// Loads detached auth-server configuration on a newly created launcher workspace.
     public static void init() {
-        // FreeCore builds use the built-in authentication endpoint exclusively.
-        // Detached HMCL auth-server lists are intentionally ignored.
+        Path configLocation;
+        Path jarPath = JarUtils.thisJarPath();
+        if (jarPath != null && Files.isRegularFile(jarPath) && Files.isWritable(jarPath)) {
+            configLocation = jarPath.getParent().resolve(CONFIG_FILENAME);
+        } else {
+            configLocation = Paths.get(CONFIG_FILENAME);
+        }
+
+        if (SettingsManager.isNewlyCreated() && Files.exists(configLocation)) {
+            AuthlibInjectorServers configInstance;
+            try {
+                configInstance = JsonUtils.fromJsonFile(configLocation, AuthlibInjectorServers.class);
+            } catch (IOException | JsonParseException e) {
+                LOG.warning("Malformed authlib-injectors.json", e);
+                return;
+            }
+
+            if (!configInstance.urls.isEmpty()) {
+                for (String url : configInstance.urls) {
+                    Task.supplyAsync(Schedulers.io(), () -> AuthlibInjectorServer.locateServer(url))
+                            .thenAcceptAsync(Schedulers.javafx(), server -> {
+                                if (!Accounts.isFreeCoreServer(server)
+                                        && !getAuthlibInjectorServers().contains(server)) {
+                                    getAuthlibInjectorServers().add(server);
+                                    servers.add(server);
+                                }
+                            })
+                            .start();
+                }
+            }
+        }
     }
 }

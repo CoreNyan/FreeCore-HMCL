@@ -19,10 +19,13 @@ package org.jackhuang.hmcl.ui.account;
 
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.*;
+import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.geometry.Insets;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Skin;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import org.jackhuang.hmcl.auth.Account;
@@ -36,6 +39,7 @@ import org.jackhuang.hmcl.ui.construct.AdvancedListItem;
 import org.jackhuang.hmcl.ui.construct.ClassTitle;
 import org.jackhuang.hmcl.ui.decorator.DecoratorAnimatedPage;
 import org.jackhuang.hmcl.ui.decorator.DecoratorPage;
+import org.jackhuang.hmcl.util.javafx.BindingMapping;
 import org.jackhuang.hmcl.util.javafx.MappedObservableList;
 
 import java.util.Locale;
@@ -78,7 +82,7 @@ public final class AccountListPage extends DecoratorAnimatedPage implements Deco
     }
 
     private static class AccountListPageSkin extends DecoratorAnimatedPageSkin<AccountListPage> {
-
+        private final ObservableList<AdvancedListItem> authServerItems;
 
         public AccountListPageSkin(AccountListPage skinnable) {
             super(skinnable);
@@ -102,13 +106,61 @@ public final class AccountListPage extends DecoratorAnimatedPage implements Deco
                         }
                     });
 
+                    VBox boxAuthServers = new VBox();
+                    authServerItems = MappedObservableList.create(
+                            skinnable.authServersProperty().filtered(server -> !Accounts.isFreeCoreServer(server)), server -> {
+                        AdvancedListItem item = new AdvancedListItem();
+                        item.getStyleClass().add("navigation-drawer-item");
+                        item.setLeftIcon(SVG.DRESSER);
+                        item.setOnAction(e -> {
+                            if (SettingsManager.isUserGameAccountsReadOnly()) {
+                                confirmOverwriteUserAccounts(() -> Controllers.dialog(new CreateAccountPane(server)));
+                            } else {
+                                Controllers.dialog(new CreateAccountPane(server));
+                            }
+                        });
+                        item.setRightAction(SVG.CLOSE, () -> {
+                            if (SettingsManager.isAuthlibInjectorServersReadOnly()) {
+                                confirmOverwriteAuthlibInjectorServers(() -> confirmRemoveAuthlibInjectorServer(skinnable, server));
+                            } else {
+                                confirmRemoveAuthlibInjectorServer(skinnable, server);
+                            }
+                        });
+
+                        ObservableValue<String> serverTitle = BindingMapping.of(server, AuthlibInjectorServer::getName);
+                        item.titleProperty().bind(serverTitle);
+                        item.setSubtitle(server.getDisplayHostUrl());
+                        Tooltip tooltip = new Tooltip();
+                        tooltip.textProperty().bind(Bindings.format("%s (%s)", serverTitle, server.getUrl()));
+                        FXUtils.installFastTooltip(item, tooltip);
+                        return item;
+                    });
+                    Bindings.bindContent(boxAuthServers.getChildren(), authServerItems);
+
                     ClassTitle title = new ClassTitle(i18n("account.create").toUpperCase(Locale.ROOT));
-                    boxMethods.getChildren().setAll(title, freeCoreItem);
+                    boxMethods.getChildren().setAll(title, freeCoreItem, boxAuthServers);
+                }
+
+                AdvancedListItem addAuthServerItem = new AdvancedListItem();
+                {
+                    addAuthServerItem.getStyleClass().add("navigation-drawer-item");
+                    addAuthServerItem.setTitle(i18n("account.injector.add"));
+                    addAuthServerItem.setSubtitle(i18n("account.methods.authlib_injector"));
+                    addAuthServerItem.setLeftIcon(SVG.ADD_CIRCLE);
+                    addAuthServerItem.setOnAction(e -> {
+                        if (SettingsManager.isAuthlibInjectorServersReadOnly()) {
+                            confirmOverwriteAuthlibInjectorServers(
+                                    () -> Controllers.dialog(new AddAuthlibInjectorServerPane()));
+                        } else {
+                            Controllers.dialog(new AddAuthlibInjectorServerPane());
+                        }
+                    });
+                    VBox.setMargin(addAuthServerItem, new Insets(0, 0, 12, 0));
                 }
 
                 ScrollPane scrollPane = new ScrollPane(boxMethods);
                 VBox.setVgrow(scrollPane, Priority.ALWAYS);
-                setLeft(scrollPane);
+                setLeft(scrollPane, addAuthServerItem);
             }
 
             ScrollPane scrollPane = new ScrollPane();
@@ -149,6 +201,9 @@ public final class AccountListPage extends DecoratorAnimatedPage implements Deco
         private static void confirmRemoveAuthlibInjectorServer(
                 AccountListPage skinnable,
                 AuthlibInjectorServer server) {
+            if (Accounts.isFreeCoreServer(server)) {
+                return;
+            }
             Controllers.confirm(i18n("button.remove.confirm"), i18n("button.remove"), () -> {
                 skinnable.authServersProperty().remove(server);
             }, null);

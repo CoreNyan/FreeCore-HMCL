@@ -64,7 +64,10 @@ public final class Accounts {
     private static final AuthlibInjectorArtifactProvider AUTHLIB_INJECTOR_DOWNLOADER = createAuthlibInjectorArtifactProvider();
 
     /// The authentication endpoint used by the FreeCore launcher.
-    public static final String FREECORE_AUTH_SERVER_URL = "https://account.freecore.cc/api/yggdrasil/";
+    public static final String FREECORE_AUTH_SERVER_URL = "https://account.lynnhma.xyz/api/yggdrasil/";
+
+    /// The previous FreeCore authentication endpoint migrated to [#FREECORE_AUTH_SERVER_URL].
+    private static final String LEGACY_FREECORE_AUTH_SERVER_URL = "https://account.freecore.cc/api/yggdrasil/";
 
     /// The fixed FreeCore authentication server. It is always available and cannot be removed from the launcher.
     public static final AuthlibInjectorServer FREECORE_AUTH_SERVER = new AuthlibInjectorServer(FREECORE_AUTH_SERVER_URL);
@@ -254,7 +257,9 @@ public final class Accounts {
 
     /// Returns whether an authentication server is the fixed FreeCore server.
     public static boolean isFreeCoreServer(AuthlibInjectorServer server) {
-        return normalizeServerUrl(server.getUrl()).equals(normalizeServerUrl(FREECORE_AUTH_SERVER_URL));
+        String normalizedUrl = normalizeServerUrl(server.getUrl());
+        return normalizedUrl.equals(normalizeServerUrl(FREECORE_AUTH_SERVER_URL))
+                || normalizedUrl.equals(normalizeServerUrl(LEGACY_FREECORE_AUTH_SERVER_URL));
     }
 
     /// Compares server URLs without considering a trailing slash.
@@ -308,8 +313,8 @@ public final class Accounts {
         try {
             AccountID accountID = Account.readAccountID(record);
             Account account = factory.fromStorage(record, SettingsManager.getAccountPrivateData(accountID, portable));
-            if (!isFreeCoreAccount(account)) {
-                LOG.info("Ignoring account outside the FreeCore authentication server: " + describeAccountRecord(record));
+            if (!(account instanceof AuthlibInjectorAccount)) {
+                LOG.info("Ignoring account outside authlib-injector authentication: " + describeAccountRecord(record));
                 return null;
             }
             return account;
@@ -350,8 +355,9 @@ public final class Accounts {
             SettingsManager.saveUserGameAccountMetadataRecords();
         }
 
-        // Keep only the built-in FreeCore server so users cannot switch to another authentication backend.
-        getAuthlibInjectorServers().setAll(FREECORE_AUTH_SERVER);
+        // Replace the old built-in endpoint and retain the new one while preserving user-added servers.
+        getAuthlibInjectorServers().removeIf(Accounts::isFreeCoreServer);
+        getAuthlibInjectorServers().add(0, FREECORE_AUTH_SERVER);
 
         // load accounts
         Account selected = null;
@@ -511,7 +517,8 @@ public final class Accounts {
     }
 
     private static AuthlibInjectorServer getOrCreateAuthlibInjectorServer(String url) {
-        if (normalizeServerUrl(url).equals(normalizeServerUrl(FREECORE_AUTH_SERVER_URL))) {
+        if (normalizeServerUrl(url).equals(normalizeServerUrl(FREECORE_AUTH_SERVER_URL))
+                || normalizeServerUrl(url).equals(normalizeServerUrl(LEGACY_FREECORE_AUTH_SERVER_URL))) {
             return FREECORE_AUTH_SERVER;
         }
         return getAuthlibInjectorServers().stream()
