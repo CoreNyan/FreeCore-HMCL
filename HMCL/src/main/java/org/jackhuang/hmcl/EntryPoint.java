@@ -47,6 +47,10 @@ public final class EntryPoint {
         System.getProperties().putIfAbsent("java.net.useSystemProxies", "true");
         System.getProperties().putIfAbsent("javafx.autoproxy.disable", "true");
         System.getProperties().putIfAbsent("http.agent", "HMCL/" + Metadata.VERSION);
+        if (OperatingSystem.CURRENT_OS == OperatingSystem.WINDOWS) {
+            // The Windows trust store includes certificates installed by local HTTPS proxies.
+            System.getProperties().putIfAbsent("javax.net.ssl.trustStoreType", "Windows-ROOT");
+        }
 
         createHMCLDirectories();
         LOG.start(Metadata.HMCL_LOCAL_HOME.resolve("logs"));

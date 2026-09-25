@@ -33,7 +33,17 @@ import org.jackhuang.hmcl.util.versioning.VersionNumber;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
+import javax.swing.BorderFactory;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JProgressBar;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import java.awt.BorderLayout;
+import java.awt.Dimension;
+import java.awt.Window;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -45,6 +55,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.jackhuang.hmcl.util.logging.Logger.LOG;
 
@@ -85,15 +96,19 @@ public final class FreeCoreBootstrap {
     public static boolean run() {
         refreshRemoteConfiguration();
 
-        try {
-            return checkMandatoryUpdate();
-        } catch (MandatoryUpdateException e) {
-            LOG.warning("The mandatory FreeCore launcher update could not be applied", e);
-            showMandatoryUpdateFailure(e.getMessage());
-            return false;
-        } catch (Exception e) {
-            LOG.warning("Failed to check for a FreeCore launcher update; continuing with the installed version", e);
-            return true;
+        while (true) {
+            try {
+                return checkMandatoryUpdate();
+            } catch (MandatoryUpdateException e) {
+                LOG.warning("The mandatory FreeCore launcher update could not be applied", e);
+                showMandatoryUpdateFailure(e.getMessage());
+                return false;
+            } catch (Exception e) {
+                LOG.warning("Failed to check for a mandatory FreeCore launcher update", e);
+                if (!showUpdateCheckRetry()) {
+                    return false;
+                }
+            }
         }
     }
 
@@ -153,9 +168,11 @@ public final class FreeCoreBootstrap {
         }
 
         LOG.info("Mandatory FreeCore update available: " + Metadata.VERSION + " -> " + release.version());
+        UpdateProgressDialog progressDialog = showUpdateProgress(release.version());
         try {
-            stageWindowsUpdate(currentExecutable, release);
+            stageWindowsUpdate(currentExecutable, release, progressDialog);
         } catch (IOException e) {
+            progressDialog.close();
             throw new MandatoryUpdateException(
                     "FreeCore " + release.version() + " 更新下载或安装失败，请检查网络和文件权限后重试。",
                     e);
@@ -203,13 +220,18 @@ public final class FreeCoreBootstrap {
     }
 
     /// Downloads, verifies, and hands the new executable to an external replacement script.
-    private static void stageWindowsUpdate(Path currentExecutable, Release release) throws IOException {
+    private static void stageWindowsUpdate(
+            Path currentExecutable,
+            Release release,
+            UpdateProgressDialog progressDialog) throws IOException {
         Path updateDirectory = Metadata.HMCL_LOCAL_HOME.resolve("update");
         Files.createDirectories(updateDirectory);
         Path downloadedExecutable = updateDirectory.resolve(WINDOWS_ASSET_NAME + ".download");
         Path updaterScript = updateDirectory.resolve("apply-freecore-update.cmd");
 
+        progressDialog.setStatus("正在下载 FreeCore " + release.version() + "…");
         downloadFile(release.executableUrl(), downloadedExecutable);
+        progressDialog.setStatus("正在校验更新文件…");
         String expectedChecksum = readExpectedChecksum(release.checksumUrl());
         String actualChecksum = DigestUtils.digestToString("SHA-256", downloadedExecutable);
         if (!actualChecksum.equalsIgnoreCase(expectedChecksum)) {
@@ -230,7 +252,8 @@ public final class FreeCoreBootstrap {
                 StandardOpenOption.TRUNCATE_EXISTING,
                 StandardOpenOption.WRITE);
 
-        new ProcessBuilder("cmd.exe", "/d", "/c", updaterScript.toString())
+        progressDialog.setStatus("校验完成，正在重启并安装更新…");
+        new ProcessBuilder("cmd.exe", "/d", "/s", "/c", "\"" + updaterScript + "\"")
                 .directory(currentExecutable.getParent().toFile())
                 .start();
         LOG.info("FreeCore updater started for version " + release.version());
@@ -335,6 +358,62 @@ public final class FreeCoreBootstrap {
                 JOptionPane.ERROR_MESSAGE);
     }
 
+    /// Asks the user to retry a failed mandatory release check or exit the launcher.
+    private static boolean showUpdateCheckRetry() {
+        SwingUtils.initLookAndFeel();
+        Object[] options = {"重试", "退出"};
+        int result = JOptionPane.showOptionDialog(
+                null,
+                "无法连接 GitHub 检查 FreeCore 强制更新。\n请检查网络或代理设置后重试。",
+                "FreeCore 更新检查失败",
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.ERROR_MESSAGE,
+                null,
+                options,
+                options[0]);
+        return result == 0;
+    }
+
+    /// Opens a visible progress window before the mandatory update download starts.
+    private static UpdateProgressDialog showUpdateProgress(String version) {
+        SwingUtils.initLookAndFeel();
+        AtomicReference<UpdateProgressDialog> result = new AtomicReference<>();
+        Runnable createDialog = () -> {
+            JLabel title = new JLabel("发现 FreeCore " + version + " 强制更新", SwingConstants.CENTER);
+            JLabel status = new JLabel("正在准备下载…", SwingConstants.CENTER);
+            JProgressBar progress = new JProgressBar();
+            progress.setIndeterminate(true);
+
+            JPanel panel = new JPanel(new BorderLayout(0, 12));
+            panel.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
+            panel.add(title, BorderLayout.NORTH);
+            panel.add(progress, BorderLayout.CENTER);
+            panel.add(status, BorderLayout.SOUTH);
+
+            JDialog dialog = new JDialog((Window) null, "FreeCore 正在更新");
+            dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+            dialog.setModal(false);
+            dialog.setAlwaysOnTop(true);
+            dialog.setContentPane(panel);
+            dialog.setPreferredSize(new Dimension(420, 150));
+            dialog.pack();
+            dialog.setLocationRelativeTo(null);
+            dialog.setVisible(true);
+            result.set(new UpdateProgressDialog(dialog, status));
+        };
+
+        try {
+            if (SwingUtilities.isEventDispatchThread()) {
+                createDialog.run();
+            } else {
+                SwingUtilities.invokeAndWait(createDialog);
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to display the FreeCore update progress", e);
+        }
+        return Objects.requireNonNull(result.get());
+    }
+
     /// Parsed mandatory release assets.
     ///
     /// @param version normalized release version
@@ -351,6 +430,31 @@ public final class FreeCoreBootstrap {
         /// Creates a blocking update error with an optional underlying I/O failure.
         private MandatoryUpdateException(String message, @Nullable Throwable cause) {
             super(message, cause);
+        }
+    }
+
+    /// Swing window that reports mandatory update progress before the launcher exits.
+    private static final class UpdateProgressDialog {
+        /// Visible update dialog.
+        private final JDialog dialog;
+
+        /// Text describing the current update stage.
+        private final JLabel status;
+
+        /// Creates a progress window wrapper around its Swing controls.
+        private UpdateProgressDialog(JDialog dialog, JLabel status) {
+            this.dialog = dialog;
+            this.status = status;
+        }
+
+        /// Replaces the current progress message on the Swing event thread.
+        private void setStatus(String text) {
+            SwingUtilities.invokeLater(() -> status.setText(text));
+        }
+
+        /// Closes the progress window after a failed update attempt.
+        private void close() {
+            SwingUtilities.invokeLater(dialog::dispose);
         }
     }
 }
