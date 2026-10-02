@@ -34,7 +34,6 @@ import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.control.Button;
-import javafx.scene.control.Tooltip;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
@@ -61,6 +60,7 @@ import org.jackhuang.hmcl.ui.construct.TwoLineListItem;
 import org.jackhuang.hmcl.ui.decorator.DecoratorPage;
 import org.jackhuang.hmcl.ui.instances.GameListPopupMenu;
 import org.jackhuang.hmcl.ui.instances.Instances;
+import org.jackhuang.hmcl.upgrade.FreeCoreBootstrap;
 import org.jackhuang.hmcl.upgrade.RemoteVersion;
 import org.jackhuang.hmcl.upgrade.UpdateChecker;
 import org.jackhuang.hmcl.upgrade.UpdateHandler;
@@ -76,9 +76,9 @@ import org.jetbrains.annotations.UnmodifiableView;
 import java.io.IOException;
 import java.awt.Desktop;
 import java.net.URI;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
-import java.util.function.Consumer;
 
 import static org.jackhuang.hmcl.download.RemoteVersion.Type.RELEASE;
 import static org.jackhuang.hmcl.setting.SettingsManager.state;
@@ -224,7 +224,7 @@ public final class MainPage extends StackPane implements DecoratorPage {
             updatePane.getChildren().setAll(hBox, closeUpdateButton);
         }
 
-        HBox launchPane = new HBox();
+        HBox launchPane = new HBox(8);
         launchPane.getStyleClass().add("launch-pane");
         FXUtils.onChangeAndOperate(selectedRepositorySnapshot, ignored -> mutableInstances.setAll(GameDirectoryManager.getSelectedRepository().getDisplayInstances().toList()));
         FXUtils.onScroll(launchPane, instances, list -> {
@@ -235,42 +235,14 @@ public final class MainPage extends StackPane implements DecoratorPage {
 
         StackPane.setAlignment(launchPane, Pos.BOTTOM_RIGHT);
         {
-            JFXButton launchButton = new JFXButton();
-            launchButton.getStyleClass().add("launch-button");
-            launchButton.setDefaultButton(true);
-            {
-                VBox graphic = new VBox();
-                graphic.setAlignment(Pos.CENTER);
-                Label launchLabel = new Label();
-                launchLabel.setStyle("-fx-font-size: 16px;");
-                Label currentLabel = new Label();
-                currentLabel.setStyle("-fx-font-size: 12px;");
-
-                FXUtils.onChangeAndOperate(currentGameProperty(), new Consumer<>() {
-                    private Tooltip tooltip;
-
-                    @Override
-                    public void accept(@Nullable HMCLGameInstance currentGame) {
-                        if (currentGame == null) {
-                            launchLabel.setText(i18n("instance.launch.empty"));
-                            currentLabel.setText(null);
-                            graphic.getChildren().setAll(launchLabel);
-                            FXUtils.setOnActionWithCooldown(launchButton, MainPage.this::launchNoGame);
-                            if (tooltip == null)
-                                tooltip = new Tooltip(i18n("instance.launch.empty.tooltip"));
-                            FXUtils.installFastTooltip(launchButton, tooltip);
-                        } else {
-                            launchLabel.setText(i18n("instance.launch"));
-                            currentLabel.setText(currentGame.getId().toString());
-                            graphic.getChildren().setAll(launchLabel, currentLabel);
-                            FXUtils.setOnActionWithCooldown(launchButton, MainPage.this::launch);
-                            if (tooltip != null)
-                                Tooltip.uninstall(launchButton, tooltip);
-                        }
-                    }
-                });
-
-                launchButton.setGraphic(graphic);
+            List<FreeCoreBootstrap.GameRoute> routes = FreeCoreBootstrap.getGameRoutes();
+            for (int i = 0; i < routes.size(); i++) {
+                FreeCoreBootstrap.GameRoute route = routes.get(i);
+                JFXButton launchButton = createRouteLaunchButton(route);
+                if (i == 0) {
+                    launchButton.setDefaultButton(true);
+                }
+                launchPane.getChildren().add(launchButton);
             }
 
             menuButton = new JFXButton();
@@ -317,14 +289,33 @@ public final class MainPage extends StackPane implements DecoratorPage {
                     event.consume();
                 }
             };
-            launchButton.addEventHandler(MouseEvent.MOUSE_CLICKED, secondaryClickHandle);
             menuButton.addEventHandler(MouseEvent.MOUSE_CLICKED, secondaryClickHandle);
 
-            launchPane.getChildren().setAll(launchButton, menuButton);
+            launchPane.getChildren().add(menuButton);
         }
 
         getChildren().addAll(updatePane, launchPane);
 
+    }
+
+    /// Creates a main-menu button that launches the selected game directly into one server route.
+    private JFXButton createRouteLaunchButton(FreeCoreBootstrap.GameRoute route) {
+        JFXButton button = new JFXButton(route.name());
+        button.getStyleClass().add("launch-button");
+        button.setMinWidth(164);
+        button.setPrefWidth(164);
+        button.setMaxWidth(210);
+        button.setOnAction(event -> {
+            HMCLGameInstance currentGame = getCurrentGame();
+            if (currentGame == null) {
+                launchNoGame(route);
+                return;
+            }
+            Instances.launch(currentGame, launcherHelper ->
+                    launcherHelper.setQuickPlayOption(new QuickPlayOption.MultiPlayer(route.address())));
+        });
+        FXUtils.installFastTooltip(button, route.address());
+        return button;
     }
 
     /// Opens a FreeCore link from a button action using the desktop browser integration.
@@ -395,12 +386,7 @@ public final class MainPage extends StackPane implements DecoratorPage {
         }
     }
 
-    private void launch() {
-        HMCLGameRepository repository = GameDirectoryManager.getSelectedRepository();
-        Instances.launch(repository.getSelectedInstance());
-    }
-
-    private void launchNoGame() {
+    private void launchNoGame(FreeCoreBootstrap.GameRoute route) {
         DownloadProvider downloadProvider = DownloadProviders.getDownloadProvider();
         VersionList<?> versionList = downloadProvider.getVersionList(GameComponentType.GAME);
 
@@ -431,7 +417,9 @@ public final class MainPage extends StackPane implements DecoratorPage {
                     if (exception == null) {
                         HMCLGameRepository repository = GameDirectoryManager.getSelectedRepository();
                         repository.setSelectedInstance(repository.getInstance(instanceHolder.value));
-                        launch();
+                        HMCLGameInstance instance = repository.getInstance(instanceHolder.value);
+                        Instances.launch(instance, launcherHelper ->
+                                launcherHelper.setQuickPlayOption(new QuickPlayOption.MultiPlayer(route.address())));
                     } else if (!(exception instanceof CancellationException)) {
                         LOG.warning("Failed to install game", exception);
                         Controllers.dialog(StringUtils.getStackTrace(exception),

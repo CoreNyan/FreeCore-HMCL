@@ -54,6 +54,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.HexFormat;
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -90,6 +92,14 @@ public final class FreeCoreBootstrap {
 
     /// Current configured authentication endpoint.
     private static volatile String defaultAuthServerUrl = BUILTIN_AUTH_SERVER_URL;
+
+    /// Default game routes used when the repository configuration cannot be loaded.
+    private static final List<GameRoute> BUILTIN_GAME_ROUTES = List.of(
+            new GameRoute("主线路 加入游戏", "mc.lynnhma.xyz"),
+            new GameRoute("移动线路 加入游戏", "yd.lynnhma.xyz"));
+
+    /// Current configured game routes shown on the main menu.
+    private static volatile List<GameRoute> gameRoutes = BUILTIN_GAME_ROUTES;
 
     /// Previous fixed authentication endpoint when the repository configuration changed.
     private static volatile @Nullable String previousAuthServerUrl;
@@ -132,6 +142,11 @@ public final class FreeCoreBootstrap {
     /// Returns the authentication endpoint loaded from the repository configuration.
     public static String getDefaultAuthServerUrl() {
         return defaultAuthServerUrl;
+    }
+
+    /// Returns the configured game routes shown as main-menu join buttons.
+    public static List<GameRoute> getGameRoutes() {
+        return gameRoutes;
     }
 
     /// Returns the previous fixed authentication endpoint when a migration is pending.
@@ -186,6 +201,7 @@ public final class FreeCoreBootstrap {
             }
 
             defaultAuthServerUrl = normalizeAuthServerUrl(configuredUrl);
+            gameRoutes = parseGameRoutes(root);
             remoteConfigurationLoaded = true;
             updateRemoteConfigurationState(defaultAuthServerUrl);
             LOG.info("Loaded FreeCore remote configuration: defaultAuthServerUrl=" + defaultAuthServerUrl);
@@ -194,14 +210,41 @@ public final class FreeCoreBootstrap {
             authServerChanged = false;
             try {
                 defaultAuthServerUrl = readAppliedAuthenticationServerUrl();
+                gameRoutes = BUILTIN_GAME_ROUTES;
                 LOG.warning("Failed to load FreeCore remote configuration; using the last applied URL", e);
             } catch (Exception stateError) {
                 defaultAuthServerUrl = BUILTIN_AUTH_SERVER_URL;
+                gameRoutes = BUILTIN_GAME_ROUTES;
                 stateError.addSuppressed(e);
                 LOG.warning("Failed to load FreeCore remote configuration and local state; "
                         + "using the built-in URL", stateError);
             }
         }
+    }
+
+    /// Parses valid game routes from the repository configuration.
+    private static List<GameRoute> parseGameRoutes(JsonObject root) {
+        JsonElement routesElement = root.get("gameRoutes");
+        if (!(routesElement instanceof JsonArray routes)) {
+            return BUILTIN_GAME_ROUTES;
+        }
+
+        List<GameRoute> parsedRoutes = new java.util.ArrayList<>();
+        for (JsonElement element : routes) {
+            if (!(element instanceof JsonObject route)) {
+                continue;
+            }
+            String name = JsonUtils.getString(route, "name");
+            String address = JsonUtils.getString(route, "address");
+            if (name != null && !name.isBlank() && address != null && !address.isBlank()) {
+                parsedRoutes.add(new GameRoute(name.trim(), address.trim()));
+            }
+        }
+        return parsedRoutes.isEmpty() ? BUILTIN_GAME_ROUTES : Collections.unmodifiableList(parsedRoutes);
+    }
+
+    /// Describes one server route exposed by the FreeCore main menu.
+    public record GameRoute(String name, String address) {
     }
 
     /// Compares the fetched URL with the last successfully applied repository configuration.
