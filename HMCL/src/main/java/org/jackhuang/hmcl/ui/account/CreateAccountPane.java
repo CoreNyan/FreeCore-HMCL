@@ -32,7 +32,9 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextInputControl;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.*;
+import javafx.collections.ListChangeListener;
 import org.glavo.uuid.UUIDs;
 import org.jackhuang.hmcl.auth.Account;
 import org.jackhuang.hmcl.auth.AccountFactory;
@@ -168,7 +170,8 @@ public class CreateAccountPane extends JFXDialogLayout implements DialogAware {
             detailsContainer = new StackPane();
             detailsContainer.setPadding(new Insets(15, 0, 0, 0));
 
-            VBox boxBody = new VBox(tabHeader, detailsContainer);
+            VBox boxBody = new VBox(tabHeader, createExistingAccountsPane(), detailsContainer);
+            boxBody.setSpacing(8);
             boxBody.setAlignment(Pos.CENTER);
             body = boxBody;
             setBody(body);
@@ -176,12 +179,62 @@ public class CreateAccountPane extends JFXDialogLayout implements DialogAware {
         } else {
             detailsContainer = new StackPane();
             detailsContainer.setPadding(new Insets(10, 0, 0, 0));
-            body = detailsContainer;
+            body = new VBox(createExistingAccountsPane(), detailsContainer);
+            ((VBox) body).setSpacing(8);
             setBody(body);
         }
         initDetailsPane();
 
         setPrefWidth(560);
+    }
+
+    /// Creates the existing-account section shown above the login form.
+    ///
+    /// @return a live account list with protected-account aware delete actions
+    private Node createExistingAccountsPane() {
+        VBox rows = new VBox(4);
+        rows.setPadding(new Insets(4, 0, 0, 0));
+
+        Runnable rebuild = () -> {
+            rows.getChildren().clear();
+            for (Account account : Accounts.getAccounts()) {
+                Label name = new Label(StringUtils.isBlank(account.getProfileName())
+                        ? account.getProfileID().toString() : account.getProfileName());
+                name.setMaxWidth(Double.MAX_VALUE);
+                HBox.setHgrow(name, Priority.ALWAYS);
+
+                JFXButton remove = FXUtils.newToggleButton4(SVG.DELETE_FOREVER);
+                FXUtils.installFastTooltip(remove, i18n("button.delete"));
+                remove.setOnAction(event -> Controllers.confirm(
+                        i18n("button.remove.confirm"), i18n("button.remove"),
+                        () -> new AccountListItem(account).remove(), null));
+                if (Accounts.isProtectedAccount(account)) {
+                    remove.setVisible(false);
+                    remove.setManaged(false);
+                }
+
+                HBox row = new HBox(8, name, remove);
+                row.setAlignment(Pos.CENTER_LEFT);
+                row.getStyleClass().add("card");
+                row.setPadding(new Insets(4, 8, 4, 8));
+                rows.getChildren().add(row);
+            }
+        };
+        rebuild.run();
+        Accounts.getAccounts().addListener((ListChangeListener<Account>) change -> rebuild.run());
+
+        ScrollPane scroll = new ScrollPane(rows);
+        scroll.setFitToWidth(true);
+        scroll.setPrefViewportHeight(92);
+        scroll.setMaxHeight(120);
+        scroll.setVisible(!Accounts.getAccounts().isEmpty());
+        scroll.setManaged(!Accounts.getAccounts().isEmpty());
+        Accounts.getAccounts().addListener((ListChangeListener<Account>) change -> {
+            boolean visible = !Accounts.getAccounts().isEmpty();
+            scroll.setVisible(visible);
+            scroll.setManaged(visible);
+        });
+        return scroll;
     }
 
     public CreateAccountPane(AuthlibInjectorServer authServer) {

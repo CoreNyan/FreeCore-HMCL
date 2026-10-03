@@ -317,11 +317,13 @@ public final class NetworkUtils {
      */
     public static HttpURLConnection resolveConnection(HttpURLConnection conn) throws IOException {
         final boolean useCache = conn.getUseCaches();
+        final int connectTimeout = conn.getConnectTimeout();
+        final int readTimeout = conn.getReadTimeout();
         int redirect = 0;
         while (true) {
             conn.setUseCaches(useCache);
-            conn.setConnectTimeout(TIMEOUT_MILLIS);
-            conn.setReadTimeout(TIMEOUT_MILLIS);
+            conn.setConnectTimeout(connectTimeout);
+            conn.setReadTimeout(readTimeout);
             conn.setInstanceFollowRedirects(false);
             Map<String, List<String>> properties = conn.getRequestProperties();
             String method = conn.getRequestMethod();
@@ -339,6 +341,8 @@ public final class NetworkUtils {
                 properties.forEach((key, value) -> value.forEach(element -> redirected.addRequestProperty(key, element)));
                 injectApiKey(redirectedUrl, redirected);
                 redirected.setRequestMethod(method);
+                redirected.setConnectTimeout(connectTimeout);
+                redirected.setReadTimeout(readTimeout);
                 conn = redirected;
                 ++redirect;
             } else {

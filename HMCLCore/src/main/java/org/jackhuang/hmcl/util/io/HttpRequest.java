@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -48,6 +49,8 @@ public abstract class HttpRequest {
     protected final Set<Integer> toleratedHttpCodes = new HashSet<>();
     protected int retryTimes = 1;
     protected boolean ignoreHttpCode;
+    /// Per-request connection and read timeout in milliseconds.
+    private int timeoutMillis = NetworkUtils.TIMEOUT_MILLIS;
 
     private HttpRequest(String url, String method) {
         this.url = url;
@@ -88,6 +91,19 @@ public abstract class HttpRequest {
         return this;
     }
 
+    /// Sets the connection and read timeout for this request.
+    ///
+    /// @param timeout maximum duration for connecting and reading
+    /// @return this request
+    public HttpRequest timeout(Duration timeout) {
+        long millis = timeout.toMillis();
+        if (millis < 1 || millis > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("timeout must be between 1 ms and Integer.MAX_VALUE ms");
+        }
+        timeoutMillis = (int) millis;
+        return this;
+    }
+
     public abstract String getString() throws IOException;
 
     public CompletableFuture<String> getStringAsync() {
@@ -118,6 +134,8 @@ public abstract class HttpRequest {
     public HttpURLConnection createConnection() throws IOException {
         HttpURLConnection con = createHttpConnection(url);
         con.setRequestMethod(method);
+        con.setConnectTimeout(timeoutMillis);
+        con.setReadTimeout(timeoutMillis);
         for (Map.Entry<String, String> entry : headers.entrySet()) {
             con.setRequestProperty(entry.getKey(), entry.getValue());
         }

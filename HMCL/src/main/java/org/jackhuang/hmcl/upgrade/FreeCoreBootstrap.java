@@ -53,6 +53,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Objects;
@@ -177,7 +178,8 @@ public final class FreeCoreBootstrap {
             JsonObject root = JsonUtils.fromNonNullJson(
                     HttpRequest.GET(REMOTE_CONFIG_URL + "?timestamp=" + System.currentTimeMillis())
                             .header("Cache-Control", "no-cache")
-                            .retry(2)
+                            .timeout(Duration.ofSeconds(3))
+                            .retry(1)
                             .getString(),
                     JsonObject.class);
             String configuredUrl = JsonUtils.getString(root, "defaultAuthServerUrl");
@@ -321,7 +323,8 @@ public final class FreeCoreBootstrap {
                 HttpRequest.GET(LATEST_RELEASE_URL)
                         .accept("application/vnd.github+json")
                         .header("X-GitHub-Api-Version", "2022-11-28")
-                        .retry(2)
+                        .timeout(Duration.ofSeconds(3))
+                        .retry(1)
                         .getString(),
                 JsonObject.class);
 
