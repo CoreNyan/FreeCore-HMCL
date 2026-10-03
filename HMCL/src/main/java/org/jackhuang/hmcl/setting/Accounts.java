@@ -241,7 +241,7 @@ public final class Accounts {
 
     /// Returns whether the given account may be removed from its current account files.
     public static boolean canRemoveAccount(Account account) {
-        return !isProtectedAccount(account) && !isAccountFilesReadOnly(account);
+        return !isAccountFilesReadOnly(account);
     }
 
     /// Returns whether the account belongs to the fixed FreeCore authentication server.

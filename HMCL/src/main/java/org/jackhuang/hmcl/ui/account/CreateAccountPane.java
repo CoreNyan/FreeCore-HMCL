@@ -208,11 +208,6 @@ public class CreateAccountPane extends JFXDialogLayout implements DialogAware {
                 remove.setOnAction(event -> Controllers.confirm(
                         i18n("button.remove.confirm"), i18n("button.remove"),
                         () -> new AccountListItem(account).remove(), null));
-                if (Accounts.isProtectedAccount(account)) {
-                    remove.setVisible(false);
-                    remove.setManaged(false);
-                }
-
                 HBox row = new HBox(8, name, remove);
                 row.setAlignment(Pos.CENTER_LEFT);
                 row.getStyleClass().add("card");
