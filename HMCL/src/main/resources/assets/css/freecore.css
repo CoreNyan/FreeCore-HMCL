@@ -98,9 +98,9 @@
 }
 
 .launch-pane > .jfx-button.launch-button {
-    -fx-background-radius: 4;
-    -fx-border-width: 2;
-    -fx-border-color: rgba(190, 224, 170, 0.38);
+    -fx-background-radius: 4 0 0 4;
+    -fx-border-width: 2 3 2 2;
+    -fx-border-color: rgba(190, 224, 170, 0.38) rgba(9, 15, 12, 0.62) rgba(190, 224, 170, 0.38) rgba(190, 224, 170, 0.38);
 }
 
 .launch-pane > .jfx-button.menu-button {

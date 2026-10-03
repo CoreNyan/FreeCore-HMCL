@@ -1,13 +1,3 @@
 {
-  "defaultAuthServerUrl": "https://account.lynnhma.xyz/api/yggdrasil/",
-  "gameRoutes": [
-    {
-      "name": "主线路 加入游戏",
-      "address": "mc.lynnhma.xyz"
-    },
-    {
-      "name": "移动线路 加入游戏",
-      "address": "yd.lynnhma.xyz"
-    }
-  ]
+  "defaultAuthServerUrl": "https://account.lynnhma.xyz/api/yggdrasil/"
 }
