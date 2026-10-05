@@ -69,9 +69,9 @@ public final class FreeCoreBootstrap {
     public static final String BUILTIN_AUTH_SERVER_URL =
             "https://account.lynnhma.xyz/api/yggdrasil/";
 
-    /// GitHub API endpoint for the newest published FreeCore launcher release.
+    /// bdnb.cn API endpoint returning FreeCore releases ordered newest first.
     private static final String LATEST_RELEASE_URL =
-            "https://api.github.com/repos/CoreNyan/FreeCore-HMCL/releases/latest";
+            "https://bdnb.cn/api/repos/CoreNyan/FreeCore-HMCL/releases?page=1&per_page=1";
 
     /// Raw repository configuration read on every launcher start.
     private static final String REMOTE_CONFIG_URL =
@@ -322,16 +322,21 @@ public final class FreeCoreBootstrap {
         return false;
     }
 
-    /// Fetches and parses the newest GitHub release and its mandatory update assets.
+    /// Fetches and parses the newest mirrored release and its mandatory update assets.
     private static Release fetchLatestRelease() throws IOException {
-        JsonObject releaseObject = JsonUtils.fromNonNullJson(
+        JsonObject response = JsonUtils.fromNonNullJson(
                 HttpRequest.GET(LATEST_RELEASE_URL)
-                        .accept("application/vnd.github+json")
-                        .header("X-GitHub-Api-Version", "2022-11-28")
+                        .accept("application/json")
                         .timeout(Duration.ofSeconds(3))
                         .retry(1)
                         .getString(),
                 JsonObject.class);
+
+        JsonArray releases = response.getAsJsonArray("data");
+        if (releases == null || releases.isEmpty() || !releases.get(0).isJsonObject()) {
+            throw new JsonParseException("FreeCore mirror returned no releases");
+        }
+        JsonObject releaseObject = releases.get(0).getAsJsonObject();
 
         String tagName = JsonUtils.getString(releaseObject, "tag_name");
         if (tagName == null || tagName.isBlank()) {
