@@ -75,11 +75,10 @@ public final class FreeCoreBootstrap {
 
     /// Raw repository configuration read on every launcher start.
     private static final String REMOTE_CONFIG_URL =
-            "https://raw.githubusercontent.com/CoreNyan/FreeCore-HMCL/main/freecore-launcher.json";
+            "https://ghproxy.net/https://raw.githubusercontent.com/CoreNyan/FreeCore-HMCL/main/freecore-launcher.json";
 
-    /// Download proxy used for GitHub release assets in mainland China.
-    private static final String MIRROR_ASSET_DOWNLOAD_URL =
-            "https://bdnb.cn/api/download/asset";
+    /// GitHub download proxy used for release assets in mainland China.
+    private static final String GITHUB_PROXY_URL = "https://ghproxy.net/";
 
     /// Local state recording the last repository authentication URL applied to account storage.
     private static final Path REMOTE_CONFIG_STATE_FILE =
@@ -367,15 +366,12 @@ public final class FreeCoreBootstrap {
         return null;
     }
 
-    /// Rewrites a GitHub release asset URL to the bdnb.cn download proxy.
+    /// Rewrites a GitHub release asset URL to the ghproxy.net download proxy.
     private static @Nullable String toMirrorAssetUrl(@Nullable String assetUrl, String fileName) {
         if (assetUrl == null) {
             return null;
         }
-        return MIRROR_ASSET_DOWNLOAD_URL
-                + "?url=" + java.net.URLEncoder.encode(assetUrl, StandardCharsets.UTF_8)
-                + "&filename=" + java.net.URLEncoder.encode(fileName, StandardCharsets.UTF_8)
-                + "&fast=1&mirror=0&proxy=1";
+        return GITHUB_PROXY_URL + assetUrl;
     }
 
     /// Downloads, verifies, and hands the new executable to an external replacement script.
@@ -526,7 +522,7 @@ public final class FreeCoreBootstrap {
         Object[] options = {"重试", "退出"};
         int result = JOptionPane.showOptionDialog(
                 null,
-                "无法连接 GitHub 检查 FreeCore 强制更新。\n请检查网络或代理设置后重试。",
+                "无法连接 FreeCore 镜像更新服务。\n请检查网络或代理设置后重试。",
                 "FreeCore 更新检查失败",
                 JOptionPane.DEFAULT_OPTION,
                 JOptionPane.ERROR_MESSAGE,
