@@ -55,6 +55,7 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.HexFormat;
+import java.util.Base64;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -75,6 +76,10 @@ public final class FreeCoreBootstrap {
     /// Raw repository configuration read on every launcher start.
     private static final String REMOTE_CONFIG_URL =
             "https://raw.githubusercontent.com/CoreNyan/FreeCore-HMCL/main/freecore-launcher.json";
+
+    /// Download proxy used for GitHub release assets in mainland China.
+    private static final String MIRROR_ASSET_DOWNLOAD_URL =
+            "https://bdnb.cn/api/download/asset";
 
     /// Local state recording the last repository authentication URL applied to account storage.
     private static final Path REMOTE_CONFIG_STATE_FILE =
@@ -340,8 +345,8 @@ public final class FreeCoreBootstrap {
 
         return new Release(
                 normalizeVersion(tagName),
-                findAssetUrl(assets, WINDOWS_ASSET_NAME),
-                findAssetUrl(assets, WINDOWS_CHECKSUM_ASSET_NAME));
+                toMirrorAssetUrl(findAssetUrl(assets, WINDOWS_ASSET_NAME), WINDOWS_ASSET_NAME),
+                toMirrorAssetUrl(findAssetUrl(assets, WINDOWS_CHECKSUM_ASSET_NAME), WINDOWS_CHECKSUM_ASSET_NAME));
     }
 
     /// Finds the download URL of a named GitHub release asset.
@@ -355,6 +360,17 @@ public final class FreeCoreBootstrap {
             }
         }
         return null;
+    }
+
+    /// Rewrites a GitHub release asset URL to the bdnb.cn download proxy.
+    private static @Nullable String toMirrorAssetUrl(@Nullable String assetUrl, String fileName) {
+        if (assetUrl == null) {
+            return null;
+        }
+        return MIRROR_ASSET_DOWNLOAD_URL
+                + "?url=" + java.net.URLEncoder.encode(assetUrl, StandardCharsets.UTF_8)
+                + "&filename=" + java.net.URLEncoder.encode(fileName, StandardCharsets.UTF_8)
+                + "&fast=1&mirror=0&proxy=1";
     }
 
     /// Downloads, verifies, and hands the new executable to an external replacement script.
@@ -440,6 +456,10 @@ public final class FreeCoreBootstrap {
         String source = escapeBatchPath(downloadedExecutable);
         String target = escapeBatchPath(currentExecutable);
         String workingDirectory = escapeBatchPath(currentExecutable.getParent());
+        String failureMessage = "Add-Type -AssemblyName PresentationFramework; "
+                + "[System.Windows.MessageBox]::Show('FreeCore 更新失败，请检查文件权限后重新启动。','FreeCore 更新失败')";
+        String encodedFailureCommand = Base64.getEncoder().encodeToString(
+                failureMessage.getBytes(StandardCharsets.UTF_16LE));
         return "@echo off\r\n"
                 + "setlocal\r\n"
                 + ":wait_for_launcher\r\n"
@@ -457,9 +477,8 @@ public final class FreeCoreBootstrap {
                 + "del /q \"%~f0\" >nul 2>&1\r\n"
                 + "exit /b 0\r\n"
                 + ":update_failed\r\n"
-                + "start \"\" /wait powershell.exe -NoProfile -Command "
-                + "\"Add-Type -AssemblyName PresentationFramework; "
-                + "[System.Windows.MessageBox]::Show('FreeCore 更新失败，请检查文件权限后重新启动。','FreeCore 更新失败')\"\r\n"
+                + "start \"\" /b powershell.exe -NoProfile -WindowStyle Hidden -EncodedCommand "
+                + encodedFailureCommand + "\r\n"
                 + "exit /b 1\r\n";
     }
 
