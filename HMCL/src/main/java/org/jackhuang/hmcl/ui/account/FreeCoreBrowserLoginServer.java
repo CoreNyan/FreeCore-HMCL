@@ -54,8 +54,11 @@ public final class FreeCoreBrowserLoginServer {
     /// Opens the system browser; a PKCE-bound device request delivers the approved account asynchronously.
     public static synchronized void startLoginFlow(@Nullable Consumer<Account> onAccountAdded) {
         if (active != null) {
-            Platform.runLater(() -> Controllers.showToast("登录窗口已打开，请回到现有窗口继续授权"));
-            return;
+            // Closing the system browser cannot notify the launcher, so discard the old poller
+            // when the user explicitly starts a new login attempt.
+            active.set(false);
+            active = null;
+            Platform.runLater(() -> Controllers.showToast("已取消上一次登录，正在打开新的验证页面"));
         }
         AtomicBoolean running = new AtomicBoolean(true);
         active = running;
@@ -78,7 +81,7 @@ public final class FreeCoreBrowserLoginServer {
                         TimeUnit.MILLISECONDS.sleep(750);
                         continue;
                     }
-                    if (credentials != null) {
+                    if (credentials != null && running.get()) {
                         register(credentials, running, onAccountAdded);
                         return;
                     }
