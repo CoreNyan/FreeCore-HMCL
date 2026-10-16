@@ -104,11 +104,8 @@ public final class FreeCoreBootstrap {
     private static final Path REMOTE_CONFIG_STATE_FILE =
             Metadata.HMCL_LOCAL_HOME.resolve("state").resolve("freecore-remote-config.json");
 
-    /// Windows executable asset required in every launcher release.
-    private static final String WINDOWS_ASSET_NAME = "FreeCore-Launcher.exe";
-
-    /// SHA-256 sidecar required beside the Windows executable asset.
-    private static final String WINDOWS_CHECKSUM_ASSET_NAME = WINDOWS_ASSET_NAME + ".sha256";
+    /// Legacy Windows executable asset name used by early FreeCore releases.
+    private static final String LEGACY_WINDOWS_ASSET_NAME = "FreeCore-Launcher.exe";
 
     /// Environment marker used to avoid rechecking the same version directly after replacement.
     private static final String UPDATED_VERSION_ENVIRONMENT = "FREECORE_UPDATED_TO";
@@ -499,14 +496,31 @@ public final class FreeCoreBootstrap {
             throw new JsonParseException("Latest GitHub release does not contain assets");
         }
 
+        String version = normalizeVersion(tagName);
+        // Current build tasks publish HMCL-{version}.exe; keep the old name as a
+        // fallback so releases made before the naming migration remain installable.
+        String versionedAssetName = "HMCL-" + version + ".exe";
+        String executableAssetName = findAssetName(assets, versionedAssetName);
+        if (executableAssetName == null) {
+            executableAssetName = findAssetName(assets, LEGACY_WINDOWS_ASSET_NAME);
+        }
+        String checksumAssetName = executableAssetName == null ? null : executableAssetName + ".sha256";
         return new Release(
-                normalizeVersion(tagName),
-                toMirrorAssetUrl(findAssetUrl(assets, WINDOWS_ASSET_NAME), WINDOWS_ASSET_NAME),
-                toMirrorAssetUrl(findAssetUrl(assets, WINDOWS_CHECKSUM_ASSET_NAME), WINDOWS_CHECKSUM_ASSET_NAME));
+                version,
+                toMirrorAssetUrl(findAssetUrl(assets, executableAssetName)),
+                toMirrorAssetUrl(findAssetUrl(assets, checksumAssetName)));
+    }
+
+    /// Finds the first exact asset name present in a release response.
+    private static @Nullable String findAssetName(JsonArray assets, String assetName) {
+        return findAssetUrl(assets, assetName) == null ? null : assetName;
     }
 
     /// Finds the download URL of a named GitHub release asset.
-    private static @Nullable String findAssetUrl(JsonArray assets, String assetName) {
+    private static @Nullable String findAssetUrl(JsonArray assets, @Nullable String assetName) {
+        if (assetName == null) {
+            return null;
+        }
         for (JsonElement element : assets) {
             if (!(element instanceof JsonObject asset)) {
                 continue;
@@ -519,7 +533,7 @@ public final class FreeCoreBootstrap {
     }
 
     /// Rewrites a GitHub release asset URL to the ghproxy.net download proxy.
-    private static @Nullable String toMirrorAssetUrl(@Nullable String assetUrl, String fileName) {
+    private static @Nullable String toMirrorAssetUrl(@Nullable String assetUrl) {
         if (assetUrl == null) {
             return null;
         }
@@ -533,7 +547,7 @@ public final class FreeCoreBootstrap {
             UpdateProgressDialog progressDialog) throws IOException {
         Path updateDirectory = Metadata.HMCL_LOCAL_HOME.resolve("update");
         Files.createDirectories(updateDirectory);
-        Path downloadedExecutable = updateDirectory.resolve(WINDOWS_ASSET_NAME + ".download");
+        Path downloadedExecutable = updateDirectory.resolve("FreeCore-Launcher.exe.download");
         Path updaterScript = updateDirectory.resolve("apply-freecore-update.cmd");
 
         progressDialog.setStatus("正在下载 FreeCore " + release.version() + "…");
