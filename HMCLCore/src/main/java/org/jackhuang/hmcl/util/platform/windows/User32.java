@@ -18,6 +18,8 @@
 package org.jackhuang.hmcl.util.platform.windows;
 
 import com.sun.jna.Pointer;
+import com.sun.jna.WString;
+import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.win32.StdCallLibrary;
 import org.jackhuang.hmcl.util.platform.NativeUtils;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -29,23 +31,49 @@ import org.jetbrains.annotations.Nullable;
 @NotNullByDefault
 public interface User32 extends StdCallLibrary {
 
+    /// Callback interface for EnumWindows.
+    interface WNDENUMPROC extends StdCallCallback {
+        boolean callback(Pointer hWnd, Pointer lParam);
+    }
+
     /// The loaded User32 library, or `null` when JNA is unavailable or the current platform is not Windows.
     @Nullable User32 INSTANCE = NativeUtils.USE_JNA && com.sun.jna.Platform.isWindows()
             ? NativeUtils.load("user32", User32.class)
             : null;
 
     /// Retrieves a device context for a window or for the entire screen.
-    ///
-    /// @param hWnd the target window, or `null` to retrieve the screen device context
-    /// @return the device context, or `null` if the function fails
-    /// @see <a href="https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-getdc">GetDC function</a>
     @Nullable Pointer GetDC(@Nullable Pointer hWnd);
 
     /// Releases a device context retrieved by {@link #GetDC(Pointer)}.
-    ///
-    /// @param hWnd the same window passed to {@link #GetDC(Pointer)}, or `null` for a screen device context
-    /// @param hDC the device context to release
-    /// @return `1` if the device context was released, or `0` if it was not released
-    /// @see <a href="https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-releasedc">ReleaseDC function</a>
     int ReleaseDC(@Nullable Pointer hWnd, Pointer hDC);
+
+    /// Retrieves a handle to the top-level window whose class name and window name match the specified strings.
+    @Nullable Pointer FindWindowW(@Nullable WString lpClassName, @Nullable WString lpWindowName);
+
+    /// Changes the parent window of the specified child window.
+    @Nullable Pointer SetParent(Pointer hWndChild, @Nullable Pointer hWndNewParent);
+
+    /// Changes the position and dimensions of the specified window.
+    boolean MoveWindow(Pointer hWnd, int X, int Y, int nWidth, int nHeight, boolean bRepaint);
+
+    /// Changes an attribute of the specified window.
+    int SetWindowLongW(Pointer hWnd, int nIndex, int dwNewLong);
+
+    /// Retrieves information about the specified window.
+    int GetWindowLongW(Pointer hWnd, int nIndex);
+
+    /// Sets the specified window's show state.
+    boolean ShowWindow(Pointer hWnd, int nCmdShow);
+
+    /// Brings the thread that created the specified window into the foreground and activates the window.
+    boolean SetForegroundWindow(Pointer hWnd);
+
+    /// Enumerates all top-level windows on the screen.
+    boolean EnumWindows(WNDENUMPROC lpEnumFunc, Pointer lParam);
+
+    /// Retrieves the identifier of the thread and process that created the specified window.
+    int GetWindowThreadProcessId(Pointer hWnd, IntByReference lpdwProcessId);
+
+    /// Checks if a window is visible.
+    boolean IsWindowVisible(Pointer hWnd);
 }

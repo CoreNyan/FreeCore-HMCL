@@ -1,3 +1,8 @@
 {
-  "defaultAuthServerUrl": "https://account.lynnhma.xyz/api/yggdrasil/"
+  "defaultAuthServerUrl": "https://account.lynnhma.xyz/api/yggdrasil/",
+  "loginUrl": "https://account.lynnhma.xyz/auth/login",
+  "userCenterUrl": "https://account.lynnhma.xyz/user",
+  "docsUrl": "https://docs.lynnhma.xyz",
+  "groupUrl": "https://qm.qq.com/q/fwCibn5mjC",
+  "officialWebsiteUrl": "https://lynnhma.xyz/"
 }

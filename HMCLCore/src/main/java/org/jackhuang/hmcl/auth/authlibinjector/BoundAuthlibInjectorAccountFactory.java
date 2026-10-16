@@ -41,6 +41,13 @@ public class BoundAuthlibInjectorAccountFactory extends AccountFactory<AuthlibIn
         return AccountLoginType.USERNAME_PASSWORD;
     }
 
+    /// Returns the artifact provider used to download the authlib-injector library.
+    ///
+    /// @return the downloader instance
+    public AuthlibInjectorArtifactProvider getDownloader() {
+        return downloader;
+    }
+
     public AuthlibInjectorServer getServer() {
         return server;
     }

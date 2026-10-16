@@ -190,6 +190,13 @@ public abstract class YggdrasilAccount extends ClassicAccount {
                 privateData.add("profileProperties", JsonUtils.GSON.toJsonTree(profile.getProperties())));
     }
 
+    /// Returns the active Yggdrasil session for this account.
+    ///
+    /// @return the current session
+    public YggdrasilSession getSession() {
+        return session;
+    }
+
     public YggdrasilService getYggdrasilService() {
         return service;
     }

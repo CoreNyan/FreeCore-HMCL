@@ -75,8 +75,6 @@ final class MainWindowPane extends StackPane {
     /// The title bar containing page navigation state.
     private final BorderPane titleBar;
 
-    /// Animated FreeCore signal layer rendered beneath the navigation frame.
-    private @Nullable Timeline freeCoreBackdropAnimation;
 
     /// The transition container used when the title-bar state changes.
     private final TransitionPane navBarPane;
@@ -205,35 +203,8 @@ final class MainWindowPane extends StackPane {
 
         backdrop.getChildren().setAll(glow, glowSecondary, signal);
 
-        if (AnimationUtils.isAnimationEnabled()) {
-            freeCoreBackdropAnimation = new Timeline(
-                    new KeyFrame(Duration.ZERO,
-                            new KeyValue(glow.scaleXProperty(), 0.92),
-                            new KeyValue(glow.scaleYProperty(), 0.92),
-                            new KeyValue(glow.opacityProperty(), 0.22),
-                            new KeyValue(glowSecondary.opacityProperty(), 0.12),
-                            new KeyValue(signal.opacityProperty(), 0.0)),
-                    new KeyFrame(Duration.seconds(6),
-                            new KeyValue(glow.scaleXProperty(), 1.08, Interpolator.EASE_BOTH),
-                            new KeyValue(glow.scaleYProperty(), 1.08, Interpolator.EASE_BOTH),
-                            new KeyValue(glow.opacityProperty(), 0.38, Interpolator.EASE_BOTH),
-                            new KeyValue(glowSecondary.opacityProperty(), 0.22, Interpolator.EASE_BOTH),
-                            new KeyValue(signal.opacityProperty(), 0.45, Interpolator.EASE_BOTH),
-                            new KeyValue(signal.translateXProperty(), 24, Interpolator.EASE_BOTH)),
-                    new KeyFrame(Duration.seconds(12),
-                            new KeyValue(glow.scaleXProperty(), 0.92, Interpolator.EASE_BOTH),
-                            new KeyValue(glow.scaleYProperty(), 0.92, Interpolator.EASE_BOTH),
-                            new KeyValue(glow.opacityProperty(), 0.22, Interpolator.EASE_BOTH),
-                            new KeyValue(glowSecondary.opacityProperty(), 0.12, Interpolator.EASE_BOTH),
-                            new KeyValue(signal.opacityProperty(), 0.0, Interpolator.EASE_BOTH),
-                            new KeyValue(signal.translateXProperty(), -24, Interpolator.EASE_BOTH))
-            );
-            freeCoreBackdropAnimation.setCycleCount(Timeline.INDEFINITE);
-            freeCoreBackdropAnimation.play();
-        } else {
-            glow.setOpacity(0.22);
-            glowSecondary.setOpacity(0.12);
-        }
+        glow.setOpacity(0.22);
+        glowSecondary.setOpacity(0.12);
 
         return backdrop;
     }
@@ -245,13 +216,6 @@ final class MainWindowPane extends StackPane {
         HBox buttons = new HBox();
         buttons.setAlignment(Pos.TOP_RIGHT);
         buttons.setMaxSize(Region.USE_PREF_SIZE, 40);
-
-        JFXButton helpButton = new JFXButton();
-        helpButton.setFocusTraversable(false);
-        helpButton.setGraphic(SVG.HELP.createIcon(Themes.titleFillProperty()));
-        helpButton.getStyleClass().add("jfx-decorator-button");
-        helpButton.setOnAction(event -> FXUtils.openLink(Metadata.CONTACT_URL));
-        decorator.forbidDraggingWindow(helpButton);
 
         JFXButton minimizeButton = new JFXButton();
         minimizeButton.setFocusTraversable(false);
@@ -267,7 +231,7 @@ final class MainWindowPane extends StackPane {
         closeButton.setOnAction(event -> decorator.closeWindow());
         decorator.forbidDraggingWindow(closeButton);
 
-        buttons.getChildren().setAll(helpButton, minimizeButton, closeButton);
+        buttons.getChildren().setAll(minimizeButton, closeButton);
         return buttons;
     }
 

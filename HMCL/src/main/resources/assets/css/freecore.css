@@ -212,3 +212,40 @@
     -fx-border-width: 1;
     -fx-background-radius: 5;
 }
+
+
+/* Account Center Prominent Login/Register Button */
+.freecore-login-btn {
+    -fx-background-color: linear-gradient(to bottom right, #1976D2, #0D47A1);
+    -fx-background-radius: 8px;
+    -fx-border-color: rgba(255, 255, 255, 0.3);
+    -fx-border-radius: 8px;
+    -fx-border-width: 1px;
+    -fx-effect: dropshadow(gaussian, rgba(25, 118, 210, 0.5), 12, 0.3, 0, 3);
+}
+
+.freecore-login-btn:hover {
+    -fx-background-color: linear-gradient(to bottom right, #2196F3, #1565C0);
+    -fx-effect: dropshadow(gaussian, rgba(33, 150, 243, 0.7), 16, 0.4, 0, 4);
+    -fx-translate-y: -1px;
+}
+
+.freecore-login-btn:pressed {
+    -fx-background-color: linear-gradient(to bottom right, #0D47A1, #0a367c);
+    -fx-translate-y: 1px;
+}
+
+.freecore-login-btn .advanced-list-item-title {
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+    -fx-text-fill: #ffffff;
+}
+
+.freecore-login-btn .advanced-list-item-subtitle {
+    -fx-text-fill: #e3f2fd;
+    -fx-font-size: 11px;
+}
+
+.freecore-login-btn .svg {
+    -fx-fill: #ffffff;
+}

@@ -69,6 +69,26 @@ public final class FreeCoreBootstrap {
     public static final String BUILTIN_AUTH_SERVER_URL =
             "https://account.lynnhma.xyz/api/yggdrasil/";
 
+    /// Built-in web login endpoint used when the repository configuration is unavailable.
+    public static final String BUILTIN_LOGIN_URL =
+            "https://account.lynnhma.xyz/auth/login";
+
+    /// Built-in user center endpoint used when the repository configuration is unavailable.
+    public static final String BUILTIN_USER_CENTER_URL =
+            "https://account.lynnhma.xyz/user";
+
+    /// Built-in documentation endpoint used when the repository configuration is unavailable.
+    public static final String BUILTIN_DOCS_URL =
+            "https://docs.lynnhma.xyz";
+
+    /// Built-in official QQ group link used when the repository configuration is unavailable.
+    public static final String BUILTIN_GROUP_URL =
+            "https://qm.qq.com/q/fwCibn5mjC";
+
+    /// Built-in official website endpoint used when the repository configuration is unavailable.
+    public static final String BUILTIN_OFFICIAL_WEBSITE_URL =
+            "https://lynnhma.xyz/";
+
     /// bdnb.cn API endpoint returning FreeCore releases ordered newest first.
     private static final String LATEST_RELEASE_URL =
             "https://bdnb.cn/api/repos/CoreNyan/FreeCore-HMCL/releases?page=1&per_page=1";
@@ -96,6 +116,21 @@ public final class FreeCoreBootstrap {
     /// Current configured authentication endpoint.
     private static volatile String defaultAuthServerUrl = BUILTIN_AUTH_SERVER_URL;
 
+    /// Current configured web login endpoint.
+    private static volatile String loginUrl = BUILTIN_LOGIN_URL;
+
+    /// Current configured user center endpoint.
+    private static volatile String userCenterUrl = BUILTIN_USER_CENTER_URL;
+
+    /// Current configured documentation endpoint.
+    private static volatile String docsUrl = BUILTIN_DOCS_URL;
+
+    /// Current configured official QQ group link.
+    private static volatile String groupUrl = BUILTIN_GROUP_URL;
+
+    /// Current configured official website endpoint.
+    private static volatile String officialWebsiteUrl = BUILTIN_OFFICIAL_WEBSITE_URL;
+
     /// Previous fixed authentication endpoint when the repository configuration changed.
     private static volatile @Nullable String previousAuthServerUrl;
 
@@ -118,25 +153,47 @@ public final class FreeCoreBootstrap {
     public static boolean run() {
         refreshRemoteConfiguration();
 
-        while (true) {
-            try {
-                return checkMandatoryUpdate();
-            } catch (MandatoryUpdateException e) {
-                LOG.warning("The mandatory FreeCore launcher update could not be applied", e);
-                showMandatoryUpdateFailure(e.getMessage());
-                return false;
-            } catch (Exception e) {
-                LOG.warning("Failed to check for a mandatory FreeCore launcher update", e);
-                if (!showUpdateCheckRetry()) {
-                    return false;
-                }
-            }
+        try {
+            return checkMandatoryUpdate();
+        } catch (MandatoryUpdateException e) {
+            LOG.warning("The mandatory FreeCore launcher update could not be applied", e);
+            showMandatoryUpdateFailure(e.getMessage());
+            return false;
+        } catch (Throwable e) {
+            LOG.warning("Failed to check for a mandatory FreeCore launcher update; falling back to normal startup", e);
+            // Do not block user from launching when mirror or GitHub API is down.
+            return true;
         }
     }
 
     /// Returns the authentication endpoint loaded from the repository configuration.
     public static String getDefaultAuthServerUrl() {
         return defaultAuthServerUrl;
+    }
+
+    /// Returns the web login URL loaded from the repository configuration or default.
+    public static String getLoginUrl() {
+        return loginUrl;
+    }
+
+    /// Returns the user center URL loaded from the repository configuration or default.
+    public static String getUserCenterUrl() {
+        return userCenterUrl;
+    }
+
+    /// Returns the documentation URL loaded from the repository configuration or default.
+    public static String getDocsUrl() {
+        return docsUrl;
+    }
+
+    /// Returns the official QQ group link loaded from the repository configuration or default.
+    public static String getGroupUrl() {
+        return groupUrl;
+    }
+
+    /// Returns the official website URL loaded from the repository configuration or default.
+    public static String getOfficialWebsiteUrl() {
+        return officialWebsiteUrl;
     }
 
     /// Returns the previous fixed authentication endpoint when a migration is pending.
@@ -192,17 +249,50 @@ public final class FreeCoreBootstrap {
             }
 
             defaultAuthServerUrl = normalizeAuthServerUrl(configuredUrl);
+
+            String parsedLogin = JsonUtils.getString(root, "loginUrl");
+            if (parsedLogin != null && !parsedLogin.isBlank()) {
+                loginUrl = parsedLogin.trim();
+            }
+
+            String parsedUserCenter = JsonUtils.getString(root, "userCenterUrl");
+            if (parsedUserCenter != null && !parsedUserCenter.isBlank()) {
+                userCenterUrl = parsedUserCenter.trim();
+            }
+
+            String parsedDocs = JsonUtils.getString(root, "docsUrl");
+            if (parsedDocs != null && !parsedDocs.isBlank()) {
+                docsUrl = parsedDocs.trim();
+            }
+
+            String parsedGroup = JsonUtils.getString(root, "groupUrl");
+            if (parsedGroup != null && !parsedGroup.isBlank()) {
+                groupUrl = parsedGroup.trim();
+            }
+
+            String parsedWebsite = JsonUtils.getString(root, "officialWebsiteUrl");
+            if (parsedWebsite != null && !parsedWebsite.isBlank()) {
+                officialWebsiteUrl = normalizeOfficialWebsiteUrl(parsedWebsite);
+            }
+
             remoteConfigurationLoaded = true;
             updateRemoteConfigurationState(defaultAuthServerUrl);
-            LOG.info("Loaded FreeCore remote configuration: defaultAuthServerUrl=" + defaultAuthServerUrl);
+            LOG.info("Loaded FreeCore remote configuration: defaultAuthServerUrl=" + defaultAuthServerUrl
+                    + ", loginUrl=" + loginUrl + ", userCenterUrl=" + userCenterUrl);
         } catch (Exception e) {
             previousAuthServerUrl = null;
             authServerChanged = false;
             try {
                 defaultAuthServerUrl = readAppliedAuthenticationServerUrl();
+                readAppliedAdditionalUrls();
                 LOG.warning("Failed to load FreeCore remote configuration; using the last applied URL", e);
             } catch (Exception stateError) {
                 defaultAuthServerUrl = BUILTIN_AUTH_SERVER_URL;
+                loginUrl = BUILTIN_LOGIN_URL;
+                userCenterUrl = BUILTIN_USER_CENTER_URL;
+                docsUrl = BUILTIN_DOCS_URL;
+                groupUrl = BUILTIN_GROUP_URL;
+                officialWebsiteUrl = BUILTIN_OFFICIAL_WEBSITE_URL;
                 stateError.addSuppressed(e);
                 LOG.warning("Failed to load FreeCore remote configuration and local state; "
                         + "using the built-in URL", stateError);
@@ -255,11 +345,51 @@ public final class FreeCoreBootstrap {
         return normalizeAuthServerUrl(appliedUrl);
     }
 
-    /// Atomically persists the repository authentication URL applied to local account storage.
+    /// Reads cached additional endpoints from local state if available.
+    private static void readAppliedAdditionalUrls() {
+        try {
+            if (!Files.isRegularFile(REMOTE_CONFIG_STATE_FILE)) {
+                return;
+            }
+            JsonObject state = JsonUtils.fromNonNullJson(
+                    Files.readString(REMOTE_CONFIG_STATE_FILE, StandardCharsets.UTF_8),
+                    JsonObject.class);
+            String cachedLogin = JsonUtils.getString(state, "loginUrl");
+            if (cachedLogin != null && !cachedLogin.isBlank()) {
+                loginUrl = cachedLogin.trim();
+            }
+            String cachedUserCenter = JsonUtils.getString(state, "userCenterUrl");
+            if (cachedUserCenter != null && !cachedUserCenter.isBlank()) {
+                userCenterUrl = cachedUserCenter.trim();
+            }
+            String cachedDocs = JsonUtils.getString(state, "docsUrl");
+            if (cachedDocs != null && !cachedDocs.isBlank()) {
+                docsUrl = cachedDocs.trim();
+            }
+            String cachedGroup = JsonUtils.getString(state, "groupUrl");
+            if (cachedGroup != null && !cachedGroup.isBlank()) {
+                groupUrl = cachedGroup.trim();
+            }
+            String cachedWebsite = JsonUtils.getString(state, "officialWebsiteUrl");
+            if (cachedWebsite != null && !cachedWebsite.isBlank()) {
+                officialWebsiteUrl = normalizeOfficialWebsiteUrl(cachedWebsite);
+            }
+        } catch (Exception e) {
+            LOG.warning("Failed to read cached FreeCore endpoint URLs from local state", e);
+        }
+    }
+
+    /// Atomically persists the repository authentication and extended URLs to local state.
     private static void writeRemoteConfigurationState(String configuredUrl) throws IOException {
         Files.createDirectories(REMOTE_CONFIG_STATE_FILE.getParent());
         JsonObject state = new JsonObject();
         state.addProperty("defaultAuthServerUrl", configuredUrl);
+        state.addProperty("loginUrl", loginUrl);
+        state.addProperty("userCenterUrl", userCenterUrl);
+        state.addProperty("docsUrl", docsUrl);
+        state.addProperty("groupUrl", groupUrl);
+        state.addProperty("officialWebsiteUrl", officialWebsiteUrl);
+
         Path temporary = REMOTE_CONFIG_STATE_FILE.resolveSibling(
                 REMOTE_CONFIG_STATE_FILE.getFileName() + ".tmp");
         Files.writeString(
@@ -323,19 +453,41 @@ public final class FreeCoreBootstrap {
 
     /// Fetches and parses the newest mirrored release and its mandatory update assets.
     private static Release fetchLatestRelease() throws IOException {
-        JsonObject response = JsonUtils.fromNonNullJson(
-                HttpRequest.GET(LATEST_RELEASE_URL)
-                        .accept("application/json")
-                        .timeout(Duration.ofSeconds(3))
-                        .retry(1)
-                        .getString(),
-                JsonObject.class);
-
-        JsonArray releases = response.getAsJsonArray("data");
-        if (releases == null || releases.isEmpty() || !releases.get(0).isJsonObject()) {
-            throw new JsonParseException("FreeCore mirror returned no releases");
+        JsonObject releaseObject = null;
+        try {
+            JsonArray ghArray = JsonUtils.fromNonNullJson(
+                HttpRequest.GET("https://api.github.com/repos/CoreNyan/FreeCore-HMCL/releases?page=1&per_page=1")
+                    .accept("application/json")
+                    .timeout(Duration.ofSeconds(4))
+                    .getString(),
+                JsonArray.class);
+            if (ghArray != null && !ghArray.isEmpty() && ghArray.get(0).isJsonObject()) {
+                releaseObject = ghArray.get(0).getAsJsonObject();
+            }
+        } catch (Throwable ghErr) {
+            LOG.warning("Failed to fetch release from GitHub API; trying mirror", ghErr);
         }
-        JsonObject releaseObject = releases.get(0).getAsJsonObject();
+
+        if (releaseObject == null) {
+            try {
+                JsonObject response = JsonUtils.fromNonNullJson(
+                    HttpRequest.GET(LATEST_RELEASE_URL)
+                        .accept("application/json")
+                        .timeout(Duration.ofSeconds(2))
+                        .getString(),
+                    JsonObject.class);
+                JsonArray releases = response.getAsJsonArray("data");
+                if (releases != null && !releases.isEmpty() && releases.get(0).isJsonObject()) {
+                    releaseObject = releases.get(0).getAsJsonObject();
+                }
+            } catch (Throwable mirrorErr) {
+                LOG.warning("FreeCore mirror release fetch failed", mirrorErr);
+            }
+        }
+
+        if (releaseObject == null) {
+            throw new JsonParseException("All release sources failed");
+        }
 
         String tagName = JsonUtils.getString(releaseObject, "tag_name");
         if (tagName == null || tagName.isBlank()) {
@@ -490,6 +642,16 @@ public final class FreeCoreBootstrap {
             throw new IllegalArgumentException("FreeCore authentication endpoint must use HTTPS");
         }
         return normalized.endsWith("/") ? normalized : normalized + "/";
+    }
+
+    /// Keeps the public website separate from the account portal, which requires an authenticated session.
+    private static String normalizeOfficialWebsiteUrl(String url) {
+        String normalized = url.trim();
+        if (normalized.equalsIgnoreCase("https://account.lynnhma.xyz")
+                || normalized.equalsIgnoreCase("https://account.lynnhma.xyz/")) {
+            return BUILTIN_OFFICIAL_WEBSITE_URL;
+        }
+        return normalized;
     }
 
     /// Removes a conventional v prefix before version comparison.

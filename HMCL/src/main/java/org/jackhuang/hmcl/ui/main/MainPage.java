@@ -61,6 +61,7 @@ import org.jackhuang.hmcl.ui.construct.TwoLineListItem;
 import org.jackhuang.hmcl.ui.decorator.DecoratorPage;
 import org.jackhuang.hmcl.ui.instances.GameListPopupMenu;
 import org.jackhuang.hmcl.ui.instances.Instances;
+import org.jackhuang.hmcl.upgrade.FreeCoreBootstrap;
 import org.jackhuang.hmcl.upgrade.RemoteVersion;
 import org.jackhuang.hmcl.upgrade.UpdateChecker;
 import org.jackhuang.hmcl.upgrade.UpdateHandler;
@@ -74,8 +75,6 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnmodifiableView;
 
 import java.io.IOException;
-import java.awt.Desktop;
-import java.net.URI;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
 import java.util.function.Consumer;
@@ -153,10 +152,10 @@ public final class MainPage extends StackPane implements DecoratorPage {
         brandTagline.setMouseTransparent(true);
         brandTagline.getStyleClass().add("freecore-brand-tagline");
 
-        Button docsButton = createFreeCoreLinkButton("官方文档", Metadata.DOCS_URL);
-        Button accountButton = createFreeCoreLinkButton("个人中心", "https://account.freecore.cc");
-        Button groupButton = createFreeCoreLinkButton("QQ群", "https://qm.qq.com/q/fwCibn5mjC");
-        Button websiteButton = createFreeCoreLinkButton("官网", "https://freecore.cc");
+        Button docsButton = createFreeCoreLinkButton("官方文档", FreeCoreBootstrap::getDocsUrl);
+        Button accountButton = createFreeCoreLinkButton("个人中心", FreeCoreBootstrap::getUserCenterUrl);
+        Button groupButton = createFreeCoreLinkButton("QQ群", FreeCoreBootstrap::getGroupUrl);
+        Button websiteButton = createFreeCoreLinkButton("官网", FreeCoreBootstrap::getOfficialWebsiteUrl);
         HBox brandLinks = new HBox(8, docsButton, accountButton, groupButton, websiteButton);
         brandLinks.setAlignment(Pos.CENTER);
         // Only the four controls should be hit-test targets. This prevents the centered layout
@@ -327,29 +326,12 @@ public final class MainPage extends StackPane implements DecoratorPage {
 
     }
 
-    /// Opens a FreeCore link from a button action using the desktop browser integration.
-    ///
-    /// @param link the absolute HTTP(S) link to open
-    private static void openFreeCoreLink(String link) {
-        Lang.thread(() -> {
-            try {
-                if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                    Desktop.getDesktop().browse(URI.create(link));
-                } else {
-                    FXUtils.openLink(link);
-                }
-            } catch (Throwable exception) {
-                FXUtils.openLink(link);
-            }
-        }, "Open FreeCore Link", true);
-    }
-
     /// Creates a large, focusable home-page link button.
     ///
     /// @param text the visible button label
-    /// @param link the absolute HTTP(S) destination
+    /// @param link supplies the current configured HTTP(S) destination when clicked
     /// @return a configured link button
-    private static Button createFreeCoreLinkButton(String text, String link) {
+    private static Button createFreeCoreLinkButton(String text, java.util.function.Supplier<String> link) {
         Button button = new Button(text);
         button.getStyleClass().add("freecore-link-button");
         button.setMinSize(120, 56);
@@ -357,7 +339,7 @@ public final class MainPage extends StackPane implements DecoratorPage {
         button.setMaxSize(120, 56);
         button.setPickOnBounds(true);
         button.setFocusTraversable(true);
-        button.setOnAction(event -> openFreeCoreLink(link));
+        button.setOnAction(event -> FXUtils.openLink(link.get()));
         return button;
     }
 

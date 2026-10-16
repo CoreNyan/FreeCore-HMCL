@@ -92,73 +92,6 @@ public final class AccountListItemSkin extends SkinBase<AccountListItem> {
         HBox right = new HBox();
         right.setAlignment(Pos.CENTER_RIGHT);
 
-        JFXButton btnMove = new JFXButton();
-        SpinnerPane spinnerMove = new SpinnerPane();
-        spinnerMove.getStyleClass().add("small-spinner-pane");
-        btnMove.setOnAction(e -> {
-            Account account = skinnable.getAccount();
-            if (!Accounts.canMoveAccount(account)) {
-                Controllers.confirmBackupAndOverwrite(i18n("account.storage.read_only"), () -> {
-                    Accounts.forceOverwriteAccountFiles();
-                    moveAccount(skinnable);
-                });
-                return;
-            }
-
-            moveAccount(skinnable);
-        });
-        btnMove.getStyleClass().add("toggle-icon4");
-        if (skinnable.getAccount().isPortable()) {
-            btnMove.setGraphic(SVG.PUBLIC.createIcon());
-            FXUtils.installFastTooltip(btnMove, i18n("account.move_to_global"));
-        } else {
-            btnMove.setGraphic(SVG.OUTPUT.createIcon());
-            FXUtils.installFastTooltip(btnMove, i18n("account.move_to_portable"));
-        }
-        spinnerMove.setContent(btnMove);
-        right.getChildren().add(spinnerMove);
-
-        JFXButton btnRefresh = FXUtils.newToggleButton4(SVG.REFRESH);
-        SpinnerPane spinnerRefresh = new SpinnerPane();
-        spinnerRefresh.getStyleClass().setAll("small-spinner-pane");
-        spinnerRefresh.setPrefSize(30.0, 30.0);
-        if (skinnable.getAccount() instanceof MicrosoftAccount && Accounts.OAUTH_CALLBACK.getClientId().isEmpty()) {
-            btnRefresh.setDisable(true);
-            FXUtils.installFastTooltip(spinnerRefresh, i18n("account.methods.microsoft.snapshot.tooltip"));
-        }
-        btnRefresh.setOnAction(e -> {
-            spinnerRefresh.showSpinner();
-            skinnable.refreshAsync()
-                    .whenComplete(Schedulers.javafx(), ex -> {
-                        spinnerRefresh.hideSpinner();
-
-                        if (ex != null) {
-                            Controllers.showToast(Accounts.localizeErrorMessage(ex));
-                        }
-                    })
-                    .start();
-        });
-        FXUtils.installFastTooltip(btnRefresh, i18n("button.refresh"));
-        spinnerRefresh.setContent(btnRefresh);
-        right.getChildren().add(spinnerRefresh);
-
-        JFXButton btnUpload = FXUtils.newToggleButton4(SVG.CHECKROOM);
-        SpinnerPane spinnerUpload = new SpinnerPane();
-        btnUpload.setOnAction(e -> {
-            Task<?> uploadTask = skinnable.uploadSkin();
-            if (uploadTask != null) {
-                spinnerUpload.showSpinner();
-                uploadTask
-                        .whenComplete(Schedulers.javafx(), ex -> spinnerUpload.hideSpinner())
-                        .start();
-            }
-        });
-        FXUtils.installFastTooltip(btnUpload, i18n("account.skin.upload"));
-        btnUpload.disableProperty().bind(Bindings.not(skinnable.canUploadSkin()));
-        spinnerUpload.setContent(btnUpload);
-        spinnerUpload.getStyleClass().add("small-spinner-pane");
-        right.getChildren().add(spinnerUpload);
-
         JFXButton btnCopyUUID = FXUtils.newToggleButton4(SVG.CONTENT_COPY);
         btnCopyUUID.setOnAction(e -> FXUtils.copyText(skinnable.getAccount().getProfileID().toString()));
         FXUtils.installFastTooltip(btnCopyUUID, i18n("account.copy_uuid"));
@@ -178,26 +111,4 @@ public final class AccountListItemSkin extends SkinBase<AccountListItem> {
         getChildren().setAll(root);
     }
 
-    /// Moves the account between local and user account files.
-    private static void moveAccount(AccountListItem skinnable) {
-        Account account = skinnable.getAccount();
-        Accounts.getAccounts().remove(account);
-        if (account.isPortable()) {
-            account.setPortable(false);
-            if (!Accounts.getAccounts().contains(account))
-                Accounts.getAccounts().add(account);
-        } else {
-            account.setPortable(true);
-            if (!Accounts.getAccounts().contains(account)) {
-                int idx = 0;
-                for (int i = Accounts.getAccounts().size() - 1; i >= 0; i--) {
-                    if (Accounts.getAccounts().get(i).isPortable()) {
-                        idx = i + 1;
-                        break;
-                    }
-                }
-                Accounts.getAccounts().add(idx, account);
-            }
-        }
-    }
 }

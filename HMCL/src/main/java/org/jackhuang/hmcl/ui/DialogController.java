@@ -34,17 +34,8 @@ public final class DialogController {
 
     public static AuthInfo logIn(Account account) throws CancellationException, AuthenticationException, InterruptedException {
         if (account instanceof ClassicAccount) {
-            CountDownLatch latch = new CountDownLatch(1);
-            AtomicReference<AuthInfo> res = new AtomicReference<>(null);
-            runInFX(() -> {
-                ClassicAccountLoginDialog pane = new ClassicAccountLoginDialog((ClassicAccount) account, it -> {
-                    res.set(it);
-                    latch.countDown();
-                }, latch::countDown);
-                Controllers.dialog(pane);
-            });
-            latch.await();
-            return Optional.ofNullable(res.get()).orElseThrow(CancellationException::new);
+            org.jackhuang.hmcl.ui.account.FreeCoreBrowserLoginServer.startLoginFlow();
+            throw new CancellationException();
         } else if (account instanceof OAuthAccount) {
             CountDownLatch latch = new CountDownLatch(1);
             AtomicReference<AuthInfo> res = new AtomicReference<>(null);

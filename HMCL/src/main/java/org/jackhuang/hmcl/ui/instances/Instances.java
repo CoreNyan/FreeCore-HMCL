@@ -383,29 +383,10 @@ public final class Instances {
 
     private static void ensureSelectedAccount(Consumer<Account> action) {
         Account account = Accounts.getSelectedAccount();
-        if (SettingsManager.isNewlyCreated() && !AuthlibInjectorServers.getServers().isEmpty() &&
-                !(account instanceof AuthlibInjectorAccount && AuthlibInjectorServers.getServers().contains(((AuthlibInjectorAccount) account).getServer()))) {
-            CreateAccountPane dialog = new CreateAccountPane(AuthlibInjectorServers.getServers().iterator().next());
-            dialog.addEventHandler(DialogCloseEvent.CLOSE, e -> {
-                Account newAccount = Accounts.getSelectedAccount();
-                if (newAccount == null) {
-                    // user cancelled operation
-                } else {
-                    Platform.runLater(() -> action.accept(newAccount));
-                }
-            });
-            Controllers.dialog(dialog);
-        } else if (account == null) {
-            CreateAccountPane dialog = new CreateAccountPane();
-            dialog.addEventHandler(DialogCloseEvent.CLOSE, e -> {
-                Account newAccount = Accounts.getSelectedAccount();
-                if (newAccount == null) {
-                    // user cancelled operation
-                } else {
-                    Platform.runLater(() -> action.accept(newAccount));
-                }
-            });
-            Controllers.dialog(dialog);
+        if (account == null) {
+            org.jackhuang.hmcl.ui.account.FreeCoreBrowserLoginServer.startLoginFlow(
+                    newAccount -> Platform.runLater(() -> action.accept(newAccount))
+            );
         } else {
             action.accept(account);
         }

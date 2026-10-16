@@ -84,6 +84,12 @@ import static org.jackhuang.hmcl.ui.FXUtils.onEscPressed;
 /// hiding or closing that stage does not discard either the scene or the decorator state.
 @NotNullByDefault
 public final class Decorator {
+    /// The default width, in pixels, of the launcher window.
+    private static final double DEFAULT_CONTENT_WIDTH = 1200.0;
+
+    /// The default height, in pixels, of the launcher window.
+    private static final double DEFAULT_CONTENT_HEIGHT = 760.0;
+
     /// The minimum width, in pixels, of the visible window content.
     private static final double MIN_CONTENT_WIDTH = 800.0;
 
@@ -673,8 +679,10 @@ public final class Decorator {
     /// @param targetStage the stage receiving the initial outer bounds and minimum dimensions
     private void initializeStageBounds(Stage targetStage) {
         Insets insets = getWindowInsets();
-        double initialContentWidth = Math.max(MIN_CONTENT_WIDTH, SettingsManager.state().getWidth());
-        double initialContentHeight = Math.max(MIN_CONTENT_HEIGHT, SettingsManager.state().getHeight());
+        double configuredWidth = SettingsManager.state().getWidth();
+        double configuredHeight = SettingsManager.state().getHeight();
+        double initialContentWidth = configuredWidth <= 0.0 ? DEFAULT_CONTENT_WIDTH : Math.max(MIN_CONTENT_WIDTH, configuredWidth);
+        double initialContentHeight = configuredHeight <= 0.0 ? DEFAULT_CONTENT_HEIGHT : Math.max(MIN_CONTENT_HEIGHT, configuredHeight);
         double initialContentX = SettingsManager.state().getX() * PRIMARY_SCREEN_BOUNDS.getWidth();
         double initialContentY = SettingsManager.state().getY() * PRIMARY_SCREEN_BOUNDS.getHeight();
 
@@ -959,7 +967,7 @@ public final class Decorator {
     }
 
     /// Closes the current page according to its [DecoratorPage] lifecycle contract.
-    void closeCurrentPage() {
+    public void closeCurrentPage() {
         if (navigator.getCurrentPage() instanceof DecoratorPage page && page.isPageCloseable())
             page.closePage();
         else
@@ -967,7 +975,7 @@ public final class Decorator {
     }
 
     /// Navigates back if the current page permits the operation.
-    void back() {
+    public void back() {
         if (navigator.getCurrentPage() instanceof DecoratorPage page) {
             if (page.back() && navigator.canGoBack()) {
                 navigator.close();

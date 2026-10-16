@@ -43,7 +43,7 @@ import org.jackhuang.hmcl.theme.Themes;
 import org.jackhuang.hmcl.ui.Controllers;
 import org.jackhuang.hmcl.ui.FXUtils;
 import org.jackhuang.hmcl.ui.WindowsNativeUtils;
-import org.jackhuang.hmcl.ui.account.CreateAccountPane;
+import org.jackhuang.hmcl.ui.account.FreeCoreBrowserLoginServer;
 import org.jackhuang.hmcl.ui.animation.AnimationUtils;
 import org.jackhuang.hmcl.upgrade.FreeCoreBootstrap;
 import org.jackhuang.hmcl.upgrade.UpdateHandler;
@@ -160,7 +160,7 @@ public final class Launcher extends Application {
                 primaryStage.show();
 
                 if (FreeCoreBootstrap.consumeAuthenticationReloginRequired()) {
-                    Controllers.dialogLater(new CreateAccountPane(Accounts.FACTORY_FREECORE));
+                    FreeCoreBrowserLoginServer.startLoginFlow();
                 }
             });
         } catch (Throwable e) {
@@ -459,6 +459,7 @@ public final class Launcher extends Application {
                             if (refreshRate > 0) {
                                 LOG.info("Detected refresh rate: " + refreshRate + "Hz");
 
+                                // Let JavaFX present at the display refresh rate.
                                 if (refreshRate >= 90) {
                                     System.getProperties().putIfAbsent("javafx.animation.pulse", String.valueOf(refreshRate));
                                 }

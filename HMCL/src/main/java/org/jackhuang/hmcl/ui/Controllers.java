@@ -101,8 +101,7 @@ public final class Controllers {
         AccountListPage accountListPage = new AccountListPage();
         accountListPage.selectedAccountProperty().bindBidirectional(Accounts.selectedAccountProperty());
         accountListPage.accountsProperty().bindContent(Accounts.getAccounts());
-        accountListPage.authServersProperty().bindContentBidirectional(getAuthlibInjectorServers());
-        return accountListPage;
+                return accountListPage;
     });
     private static LauncherSettingsPage settingsPage;
     private static Lazy<TerracottaPage> terracottaPage = new Lazy<>(TerracottaPage::new);
@@ -547,6 +546,13 @@ public final class Controllers {
 
     public static void navigate(Node node) {
         decorator.navigate(node, ContainerAnimations.NAVIGATION, Motion.SHORT4, Motion.EASE);
+    }
+
+    /// Navigates back or closes the topmost page in the main window decorator.
+    public static void navigateBack() {
+        if (decorator != null) {
+            decorator.back();
+        }
     }
 
     public static void navigateForward(Node node) {
