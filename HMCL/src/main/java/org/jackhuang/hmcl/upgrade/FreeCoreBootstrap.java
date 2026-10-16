@@ -55,7 +55,6 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.HexFormat;
-import java.util.Base64;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -614,7 +613,7 @@ public final class FreeCoreBootstrap {
         return checksum;
     }
 
-    /// Creates a command script that waits for exit, replaces the EXE, and restarts it.
+    /// Creates an inspectable command script that waits for exit, replaces the EXE, and restarts it.
     private static String buildWindowsUpdaterScript(
             long processId,
             Path downloadedExecutable,
@@ -623,10 +622,6 @@ public final class FreeCoreBootstrap {
         String source = escapeBatchPath(downloadedExecutable);
         String target = escapeBatchPath(currentExecutable);
         String workingDirectory = escapeBatchPath(currentExecutable.getParent());
-        String failureMessage = "Add-Type -AssemblyName PresentationFramework; "
-                + "[System.Windows.MessageBox]::Show('FreeCore 更新失败，请检查文件权限后重新启动。','FreeCore 更新失败')";
-        String encodedFailureCommand = Base64.getEncoder().encodeToString(
-                failureMessage.getBytes(StandardCharsets.UTF_16LE));
         return "@echo off\r\n"
                 + "setlocal\r\n"
                 + ":wait_for_launcher\r\n"
@@ -637,15 +632,14 @@ public final class FreeCoreBootstrap {
                 + ")\r\n"
                 + "copy /y \"" + source + "\" \"" + target + "\" >nul\r\n"
                 + "if errorlevel 1 goto update_failed\r\n"
-                + "del /q \"" + source + "\" >nul 2>&1\r\n"
                 + "cd /d \"" + workingDirectory + "\"\r\n"
                 + "set \"" + UPDATED_VERSION_ENVIRONMENT + "=" + version + "\"\r\n"
                 + "start \"\" \"" + target + "\"\r\n"
-                + "del /q \"%~f0\" >nul 2>&1\r\n"
                 + "exit /b 0\r\n"
                 + ":update_failed\r\n"
-                + "start \"\" /b powershell.exe -NoProfile -WindowStyle Hidden -EncodedCommand "
-                + encodedFailureCommand + "\r\n"
+                + "echo FreeCore update failed. The downloaded file and this script were kept for inspection.\r\n"
+                + "echo Check file permissions and antivirus quarantine, then restart the launcher manually.\r\n"
+                + "pause\r\n"
                 + "exit /b 1\r\n";
     }
 
