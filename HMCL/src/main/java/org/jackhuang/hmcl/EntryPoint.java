@@ -55,6 +55,8 @@ public final class EntryPoint {
         createHMCLDirectories();
         LOG.start(Metadata.HMCL_LOCAL_HOME.resolve("logs"));
 
+        FreeCoreBootstrap.runUpdaterHelperIfRequested(args);
+
         if (!FreeCoreBootstrap.run()) {
             exit(0);
             return;

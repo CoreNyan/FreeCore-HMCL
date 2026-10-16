@@ -22,6 +22,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import org.jackhuang.hmcl.Metadata;
+import org.jackhuang.hmcl.EntryPoint;
 import org.jackhuang.hmcl.util.DigestUtils;
 import org.jackhuang.hmcl.util.SwingUtils;
 import org.jackhuang.hmcl.util.gson.JsonUtils;
@@ -54,6 +55,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
+import java.util.Map;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Objects;
@@ -109,6 +111,9 @@ public final class FreeCoreBootstrap {
     /// Environment marker used to avoid rechecking the same version directly after replacement.
     private static final String UPDATED_VERSION_ENVIRONMENT = "FREECORE_UPDATED_TO";
 
+    /// Command-line marker for the copied launcher process that applies a staged update.
+    private static final String UPDATE_HELPER_ARGUMENT = "--freecore-apply-update";
+
     /// Current configured authentication endpoint.
     private static volatile String defaultAuthServerUrl = BUILTIN_AUTH_SERVER_URL;
 
@@ -159,6 +164,49 @@ public final class FreeCoreBootstrap {
             LOG.warning("Failed to check for a mandatory FreeCore launcher update; falling back to normal startup", e);
             // Do not block user from launching when mirror or GitHub API is down.
             return true;
+        }
+    }
+
+    /// Applies a staged Windows update when this copied launcher is running as the helper process.
+    public static void runUpdaterHelperIfRequested(String[] args) {
+        if (args.length == 0 || !UPDATE_HELPER_ARGUMENT.equals(args[0])) {
+            return;
+        }
+
+        try {
+            if (args.length != 6) {
+                throw new IOException("Invalid FreeCore update helper arguments");
+            }
+            Path downloadedExecutable = Path.of(args[1]);
+            Path targetExecutable = Path.of(args[2]);
+            long processId = Long.parseLong(args[3]);
+            String version = args[4];
+            Path updaterLog = Path.of(args[5]);
+            appendUpdaterLog(updaterLog, "Update helper started for version " + version);
+
+            while (ProcessHandle.of(processId).map(ProcessHandle::isAlive).orElse(false)) {
+                Thread.sleep(500);
+            }
+
+            appendUpdaterLog(updaterLog, "Replacing launcher executable");
+            Files.move(downloadedExecutable, targetExecutable, StandardCopyOption.REPLACE_EXISTING);
+            appendUpdaterLog(updaterLog, "Replacement succeeded; restarting launcher");
+            ProcessBuilder restart = new ProcessBuilder(targetExecutable.toString())
+                    .directory(targetExecutable.getParent().toFile());
+            restart.environment().put(UPDATED_VERSION_ENVIRONMENT, version);
+            restart.start();
+            EntryPoint.exit(0);
+        } catch (Exception e) {
+            LOG.warning("Failed to apply FreeCore launcher update", e);
+            SwingUtils.initLookAndFeel();
+            JOptionPane.showMessageDialog(
+                    null,
+                    "FreeCore 更新安装失败。更新文件和日志已保留：\n"
+                            + Metadata.HMCL_LOCAL_HOME.resolve("update")
+                            + "\n\n" + Objects.toString(e.getMessage(), e.getClass().getSimpleName()),
+                    "FreeCore 更新失败",
+                    JOptionPane.ERROR_MESSAGE);
+            EntryPoint.exit(1);
         }
     }
 
@@ -428,7 +476,8 @@ public final class FreeCoreBootstrap {
             return true;
         }
 
-        if (release.executableUrl() == null || release.checksumUrl() == null) {
+        if ((release.mirrorExecutableUrl() == null && release.githubExecutableUrl() == null)
+                || (release.mirrorChecksumUrl() == null && release.githubChecksumUrl() == null)) {
             throw new MandatoryUpdateException(
                     "FreeCore " + release.version() + " 缺少启动器更新文件，请联系服务器管理员。",
                     null);
@@ -504,10 +553,14 @@ public final class FreeCoreBootstrap {
             executableAssetName = findAssetName(assets, LEGACY_WINDOWS_ASSET_NAME);
         }
         String checksumAssetName = executableAssetName == null ? null : executableAssetName + ".sha256";
+        String githubExecutableUrl = findAssetUrl(assets, executableAssetName);
+        String githubChecksumUrl = findAssetUrl(assets, checksumAssetName);
         return new Release(
                 version,
-                toMirrorAssetUrl(findAssetUrl(assets, executableAssetName)),
-                toMirrorAssetUrl(findAssetUrl(assets, checksumAssetName)));
+                toMirrorAssetUrl(githubExecutableUrl),
+                githubExecutableUrl,
+                toMirrorAssetUrl(githubChecksumUrl),
+                githubChecksumUrl);
     }
 
     /// Finds the first exact asset name present in a release response.
@@ -547,39 +600,83 @@ public final class FreeCoreBootstrap {
         Path updateDirectory = Metadata.HMCL_LOCAL_HOME.resolve("update");
         Files.createDirectories(updateDirectory);
         Path downloadedExecutable = updateDirectory.resolve("FreeCore-Launcher.exe.download");
-        Path updaterScript = updateDirectory.resolve("apply-freecore-update.cmd");
+        Path updateHelper = updateDirectory.resolve("freecore-update-helper-" + release.version() + ".exe");
+        Path updaterLog = updateDirectory.resolve("apply-freecore-update.log");
 
-        progressDialog.setStatus("正在下载 FreeCore " + release.version() + "…");
-        downloadFile(release.executableUrl(), downloadedExecutable);
-        progressDialog.setStatus("正在校验更新文件…");
-        String expectedChecksum = readExpectedChecksum(release.checksumUrl());
+        progressDialog.setStatusAndWait("正在下载 FreeCore " + release.version() + "…");
+        downloadFileWithFallback(
+                release.mirrorExecutableUrl(),
+                release.githubExecutableUrl(),
+                downloadedExecutable,
+                "启动器");
+        progressDialog.setStatusAndWait("正在校验更新文件…");
+        String expectedChecksum = readExpectedChecksumWithFallback(
+                release.mirrorChecksumUrl(),
+                release.githubChecksumUrl());
         String actualChecksum = DigestUtils.digestToString("SHA-256", downloadedExecutable);
         if (!actualChecksum.equalsIgnoreCase(expectedChecksum)) {
             Files.deleteIfExists(downloadedExecutable);
             throw new IOException("Downloaded FreeCore launcher checksum mismatch");
         }
+        LOG.info("Verified FreeCore " + release.version() + " update: " + Files.size(downloadedExecutable)
+                + " bytes, SHA-256 " + actualChecksum);
 
-        String script = buildWindowsUpdaterScript(
-                ProcessHandle.current().pid(),
-                downloadedExecutable,
-                currentExecutable,
-                release.version());
-        Files.writeString(
-                updaterScript,
-                script,
-                StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING,
-                StandardOpenOption.WRITE);
+        Files.copy(currentExecutable, updateHelper, StandardCopyOption.REPLACE_EXISTING);
 
-        progressDialog.setStatus("校验完成，正在重启并安装更新…");
-        new ProcessBuilder("cmd.exe", "/d", "/s", "/c", "\"" + updaterScript + "\"")
+        progressDialog.setStatusAndWait("下载完成，正在交给系统更新；启动器即将关闭并自动重启…");
+        new ProcessBuilder(
+                updateHelper.toString(),
+                UPDATE_HELPER_ARGUMENT,
+                downloadedExecutable.toString(),
+                currentExecutable.toString(),
+                Long.toString(ProcessHandle.current().pid()),
+                release.version(),
+                updaterLog.toString())
                 .directory(currentExecutable.getParent().toFile())
                 .start();
-        LOG.info("FreeCore updater started for version " + release.version());
+        LOG.info("FreeCore update helper started for version " + release.version()
+                + " at " + updateHelper);
     }
 
     /// Downloads an update asset without retaining it in memory.
+    private static void downloadFileWithFallback(
+            @Nullable String mirrorUrl,
+            @Nullable String githubUrl,
+            Path output,
+            String assetDescription) throws IOException {
+        IOException mirrorFailure = null;
+        if (mirrorUrl != null) {
+            try {
+                LOG.info("Downloading FreeCore " + assetDescription + " from ghproxy.net: " + mirrorUrl);
+                downloadFile(mirrorUrl, output);
+                LOG.info("Downloaded FreeCore " + assetDescription + " from ghproxy.net: "
+                        + Files.size(output) + " bytes");
+                return;
+            } catch (IOException e) {
+                mirrorFailure = e;
+                LOG.warning("FreeCore ghproxy.net download failed; trying GitHub direct URL", e);
+            }
+        }
+        if (githubUrl != null) {
+            try {
+                LOG.info("Downloading FreeCore " + assetDescription + " from GitHub: " + githubUrl);
+                downloadFile(githubUrl, output);
+                LOG.info("Downloaded FreeCore " + assetDescription + " from GitHub: "
+                        + Files.size(output) + " bytes");
+                return;
+            } catch (IOException e) {
+                if (mirrorFailure != null) {
+                    e.addSuppressed(mirrorFailure);
+                }
+                throw e;
+            }
+        }
+        throw Objects.requireNonNullElseGet(
+                mirrorFailure,
+                () -> new IOException("No download URL is available for FreeCore " + assetDescription));
+    }
+
+    /// Downloads one update asset from a single HTTP URL into a temporary file.
     private static void downloadFile(String url, Path output) throws IOException {
         HttpURLConnection connection = HttpRequest.GET(url)
                 .header("Accept", "application/octet-stream")
@@ -592,16 +689,48 @@ public final class FreeCoreBootstrap {
         Path temporaryOutput = output.resolveSibling(output.getFileName() + ".tmp");
         try (InputStream input = connection.getInputStream()) {
             Files.copy(input, temporaryOutput, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(temporaryOutput, output, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            Files.deleteIfExists(temporaryOutput);
+            throw e;
         } finally {
             connection.disconnect();
         }
-        Files.move(temporaryOutput, output, StandardCopyOption.REPLACE_EXISTING);
     }
 
-    /// Reads a conventional hexadecimal SHA-256 sidecar.
-    private static String readExpectedChecksum(String url) throws IOException {
-        String content = HttpRequest.GET(url).retry(2).getString().trim();
-        String checksum = content.split("\\s+", 2)[0];
+    /// Reads a SHA-256 sidecar, falling back from the mirror to GitHub when necessary.
+    private static String readExpectedChecksumWithFallback(
+            @Nullable String mirrorUrl,
+            @Nullable String githubUrl) throws IOException {
+        IOException mirrorFailure = null;
+        if (mirrorUrl != null) {
+            try {
+                LOG.info("Reading FreeCore checksum from ghproxy.net: " + mirrorUrl);
+                return parseExpectedChecksum(HttpRequest.GET(mirrorUrl).retry(2).getString());
+            } catch (IOException e) {
+                mirrorFailure = e;
+                LOG.warning("FreeCore ghproxy.net checksum download failed; trying GitHub", e);
+            }
+        }
+        if (githubUrl != null) {
+            try {
+                LOG.info("Reading FreeCore checksum from GitHub: " + githubUrl);
+                return parseExpectedChecksum(HttpRequest.GET(githubUrl).retry(2).getString());
+            } catch (IOException e) {
+                if (mirrorFailure != null) {
+                    e.addSuppressed(mirrorFailure);
+                }
+                throw e;
+            }
+        }
+        throw Objects.requireNonNullElseGet(
+                mirrorFailure,
+                () -> new IOException("No checksum URL is available for the FreeCore update"));
+    }
+
+    /// Parses a conventional hexadecimal SHA-256 sidecar.
+    private static String parseExpectedChecksum(String content) throws IOException {
+        String checksum = content.trim().split("\\s+", 2)[0];
         if (checksum.length() != 64) {
             throw new IOException("Invalid FreeCore SHA-256 sidecar");
         }
@@ -613,34 +742,16 @@ public final class FreeCoreBootstrap {
         return checksum;
     }
 
-    /// Creates an inspectable command script that waits for exit, replaces the EXE, and restarts it.
-    private static String buildWindowsUpdaterScript(
-            long processId,
-            Path downloadedExecutable,
-            Path currentExecutable,
-            String version) {
-        String source = escapeBatchPath(downloadedExecutable);
-        String target = escapeBatchPath(currentExecutable);
-        String workingDirectory = escapeBatchPath(currentExecutable.getParent());
-        return "@echo off\r\n"
-                + "setlocal\r\n"
-                + ":wait_for_launcher\r\n"
-                + "tasklist /fi \"PID eq " + processId + "\" 2>nul | find \"" + processId + "\" >nul\r\n"
-                + "if not errorlevel 1 (\r\n"
-                + "  ping 127.0.0.1 -n 2 >nul\r\n"
-                + "  goto wait_for_launcher\r\n"
-                + ")\r\n"
-                + "copy /y \"" + source + "\" \"" + target + "\" >nul\r\n"
-                + "if errorlevel 1 goto update_failed\r\n"
-                + "cd /d \"" + workingDirectory + "\"\r\n"
-                + "set \"" + UPDATED_VERSION_ENVIRONMENT + "=" + version + "\"\r\n"
-                + "start \"\" \"" + target + "\"\r\n"
-                + "exit /b 0\r\n"
-                + ":update_failed\r\n"
-                + "echo FreeCore update failed. The downloaded file and this script were kept for inspection.\r\n"
-                + "echo Check file permissions and antivirus quarantine, then restart the launcher manually.\r\n"
-                + "pause\r\n"
-                + "exit /b 1\r\n";
+    /// Appends one timestamped line to the persistent helper diagnostic log.
+    private static void appendUpdaterLog(Path log, String message) throws IOException {
+        Files.createDirectories(log.getParent());
+        Files.writeString(
+                log,
+                java.time.Instant.now() + " " + message + System.lineSeparator(),
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.APPEND,
+                StandardOpenOption.WRITE);
     }
 
     /// Normalizes an authentication endpoint and requires HTTPS.
@@ -669,11 +780,6 @@ public final class FreeCoreBootstrap {
             return normalized.substring(1);
         }
         return normalized;
-    }
-
-    /// Escapes percent characters interpreted by command scripts.
-    private static String escapeBatchPath(Path path) {
-        return path.toAbsolutePath().normalize().toString().replace("%", "%%");
     }
 
     /// Shows why a required update prevented this launcher version from starting.
@@ -745,12 +851,16 @@ public final class FreeCoreBootstrap {
     /// Parsed mandatory release assets.
     ///
     /// @param version normalized release version
-    /// @param executableUrl Windows executable download URL
-    /// @param checksumUrl SHA-256 sidecar download URL
+    /// @param mirrorExecutableUrl Windows executable URL through ghproxy.net
+    /// @param githubExecutableUrl direct GitHub Windows executable URL
+    /// @param mirrorChecksumUrl SHA-256 sidecar URL through ghproxy.net
+    /// @param githubChecksumUrl direct GitHub SHA-256 sidecar URL
     private record Release(
             String version,
-            @Nullable String executableUrl,
-            @Nullable String checksumUrl) {
+            @Nullable String mirrorExecutableUrl,
+            @Nullable String githubExecutableUrl,
+            @Nullable String mirrorChecksumUrl,
+            @Nullable String githubChecksumUrl) {
     }
 
     /// Signals that a discovered newer release must be installed before startup may continue.
@@ -778,6 +888,20 @@ public final class FreeCoreBootstrap {
         /// Replaces the current progress message on the Swing event thread.
         private void setStatus(String text) {
             SwingUtilities.invokeLater(() -> status.setText(text));
+        }
+
+        /// Replaces the current progress message and waits until Swing paints the change.
+        private void setStatusAndWait(String text) {
+            try {
+                if (SwingUtilities.isEventDispatchThread()) {
+                    status.setText(text);
+                } else {
+                    SwingUtilities.invokeAndWait(() -> status.setText(text));
+                }
+            } catch (Exception e) {
+                LOG.warning("Failed to update FreeCore update progress", e);
+                setStatus(text);
+            }
         }
 
         /// Closes the progress window after a failed update attempt.
