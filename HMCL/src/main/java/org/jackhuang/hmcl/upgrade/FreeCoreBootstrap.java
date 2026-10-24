@@ -68,19 +68,19 @@ import static org.jackhuang.hmcl.util.logging.Logger.LOG;
 public final class FreeCoreBootstrap {
     /// Built-in authentication endpoint used when the repository configuration is unavailable.
     public static final String BUILTIN_AUTH_SERVER_URL =
-            "https://account.lynnhma.xyz/api/yggdrasil/";
+            "https://account.freecore.cc/api/yggdrasil/";
 
     /// Built-in web login endpoint used when the repository configuration is unavailable.
     public static final String BUILTIN_LOGIN_URL =
-            "https://account.lynnhma.xyz/auth/login";
+            "https://account.freecore.cc/auth/login";
 
     /// Built-in user center endpoint used when the repository configuration is unavailable.
     public static final String BUILTIN_USER_CENTER_URL =
-            "https://account.lynnhma.xyz/user";
+            "https://account.freecore.cc/user";
 
     /// Built-in documentation endpoint used when the repository configuration is unavailable.
     public static final String BUILTIN_DOCS_URL =
-            "https://docs.lynnhma.xyz";
+            "https://docs.freecore.cc";
 
     /// Built-in official QQ group link used when the repository configuration is unavailable.
     public static final String BUILTIN_GROUP_URL =
@@ -88,15 +88,20 @@ public final class FreeCoreBootstrap {
 
     /// Built-in official website endpoint used when the repository configuration is unavailable.
     public static final String BUILTIN_OFFICIAL_WEBSITE_URL =
-            "https://lynnhma.xyz/";
+            "https://freecore.cc/";
 
     /// bdnb.cn API endpoint returning FreeCore releases ordered newest first.
     private static final String LATEST_RELEASE_URL =
             "https://bdnb.cn/api/repos/CoreNyan/FreeCore-HMCL/releases?page=1&per_page=1";
 
-    /// Raw repository configuration read on every launcher start.
-    private static final String REMOTE_CONFIG_URL =
-            "https://ghproxy.net/https://raw.githubusercontent.com/CoreNyan/FreeCore-HMCL/main/freecore-launcher.json";
+    /// Redundant high-availability endpoints for the repository configuration.
+    private static final String[] REMOTE_CONFIG_URLS = {
+            "https://cdn.jsdelivr.net/gh/CoreNyan/FreeCore-HMCL@main/freecore-launcher.json",
+            "https://fastly.jsdelivr.net/gh/CoreNyan/FreeCore-HMCL@main/freecore-launcher.json",
+            "https://testingcf.jsdelivr.net/gh/CoreNyan/FreeCore-HMCL@main/freecore-launcher.json",
+            "https://ghproxy.net/https://raw.githubusercontent.com/CoreNyan/FreeCore-HMCL/main/freecore-launcher.json",
+            "https://raw.githubusercontent.com/CoreNyan/FreeCore-HMCL/main/freecore-launcher.json"
+    };
 
     /// GitHub download proxy used for release assets in mainland China.
     private static final String GITHUB_PROXY_URL = "https://ghproxy.net/";
@@ -251,6 +256,25 @@ public final class FreeCoreBootstrap {
     }
 
     /// Returns whether this startup successfully loaded the repository configuration.
+        /// Starts a non-daemon or timer task to refresh configuration periodically while running.
+    public static void startBackgroundConfigurationSync() {
+        Thread thread = new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(10 * 60 * 1000L); // 10 minutes
+                    LOG.info("Running periodic FreeCore remote configuration sync...");
+                    refreshRemoteConfiguration();
+                } catch (InterruptedException e) {
+                    break;
+                } catch (Throwable e) {
+                    LOG.warning("Background FreeCore configuration sync encountered an error", e);
+                }
+            }
+        }, "FreeCore-Config-Sync");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
     public static boolean isRemoteConfigurationLoaded() {
         return remoteConfigurationLoaded;
     }
@@ -276,71 +300,99 @@ public final class FreeCoreBootstrap {
         authServerChanged = false;
     }
 
-    /// Downloads and validates the repository configuration, retaining built-in defaults on failure.
-    private static void refreshRemoteConfiguration() {
+    /// Downloads and validates the repository configuration from redundant mirrors, retaining defaults on failure.
+    public static void refreshRemoteConfiguration() {
         remoteConfigurationLoaded = false;
-        try {
-            JsonObject root = JsonUtils.fromNonNullJson(
-                    HttpRequest.GET(REMOTE_CONFIG_URL + "?timestamp=" + System.currentTimeMillis())
-                            .header("Cache-Control", "no-cache")
-                            .timeout(Duration.ofSeconds(3))
-                            .retry(1)
-                            .getString(),
-                    JsonObject.class);
-            String configuredUrl = JsonUtils.getString(root, "defaultAuthServerUrl");
-            if (configuredUrl == null || configuredUrl.isBlank()) {
-                throw new JsonParseException("defaultAuthServerUrl is missing");
-            }
+        JsonObject fetchedRoot = null;
+        Throwable lastError = null;
 
-            defaultAuthServerUrl = normalizeAuthServerUrl(configuredUrl);
-
-            String parsedLogin = JsonUtils.getString(root, "loginUrl");
-            if (parsedLogin != null && !parsedLogin.isBlank()) {
-                loginUrl = parsedLogin.trim();
-            }
-
-            String parsedUserCenter = JsonUtils.getString(root, "userCenterUrl");
-            if (parsedUserCenter != null && !parsedUserCenter.isBlank()) {
-                userCenterUrl = parsedUserCenter.trim();
-            }
-
-            String parsedDocs = JsonUtils.getString(root, "docsUrl");
-            if (parsedDocs != null && !parsedDocs.isBlank()) {
-                docsUrl = parsedDocs.trim();
-            }
-
-            String parsedGroup = JsonUtils.getString(root, "groupUrl");
-            if (parsedGroup != null && !parsedGroup.isBlank()) {
-                groupUrl = parsedGroup.trim();
-            }
-
-            String parsedWebsite = JsonUtils.getString(root, "officialWebsiteUrl");
-            if (parsedWebsite != null && !parsedWebsite.isBlank()) {
-                officialWebsiteUrl = normalizeOfficialWebsiteUrl(parsedWebsite);
-            }
-
-            remoteConfigurationLoaded = true;
-            updateRemoteConfigurationState(defaultAuthServerUrl);
-            LOG.info("Loaded FreeCore remote configuration: defaultAuthServerUrl=" + defaultAuthServerUrl
-                    + ", loginUrl=" + loginUrl + ", userCenterUrl=" + userCenterUrl);
-        } catch (Exception e) {
-            previousAuthServerUrl = null;
-            authServerChanged = false;
+        for (String remoteUrl : REMOTE_CONFIG_URLS) {
             try {
-                defaultAuthServerUrl = readAppliedAuthenticationServerUrl();
-                readAppliedAdditionalUrls();
-                LOG.warning("Failed to load FreeCore remote configuration; using the last applied URL", e);
-            } catch (Exception stateError) {
-                defaultAuthServerUrl = BUILTIN_AUTH_SERVER_URL;
-                loginUrl = BUILTIN_LOGIN_URL;
-                userCenterUrl = BUILTIN_USER_CENTER_URL;
-                docsUrl = BUILTIN_DOCS_URL;
-                groupUrl = BUILTIN_GROUP_URL;
-                officialWebsiteUrl = BUILTIN_OFFICIAL_WEBSITE_URL;
-                stateError.addSuppressed(e);
-                LOG.warning("Failed to load FreeCore remote configuration and local state; "
-                        + "using the built-in URL", stateError);
+                String requestUrl = remoteUrl + (remoteUrl.contains("?") ? "&" : "?") + "ts=" + System.currentTimeMillis();
+                JsonObject root = JsonUtils.fromNonNullJson(
+                        HttpRequest.GET(requestUrl)
+                                .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                                .header("Pragma", "no-cache")
+                                .timeout(Duration.ofSeconds(4))
+                                .retry(1)
+                                .getString(),
+                        JsonObject.class);
+                String configuredUrl = JsonUtils.getString(root, "defaultAuthServerUrl");
+                if (configuredUrl != null && !configuredUrl.isBlank()) {
+                    fetchedRoot = root;
+                    LOG.info("Successfully fetched FreeCore remote configuration from " + remoteUrl);
+                    break;
+                }
+            } catch (Throwable e) {
+                lastError = e;
+                LOG.warning("Failed to load FreeCore remote configuration from mirror " + remoteUrl, e);
             }
+        }
+
+        if (fetchedRoot != null) {
+            try {
+                String configuredUrl = JsonUtils.getString(fetchedRoot, "defaultAuthServerUrl");
+                if (configuredUrl == null || configuredUrl.isBlank()) {
+                    throw new JsonParseException("defaultAuthServerUrl is missing");
+                }
+
+                defaultAuthServerUrl = normalizeAuthServerUrl(configuredUrl);
+
+                String parsedLogin = JsonUtils.getString(fetchedRoot, "loginUrl");
+                if (parsedLogin != null && !parsedLogin.isBlank()) {
+                    loginUrl = parsedLogin.trim();
+                }
+
+                String parsedUserCenter = JsonUtils.getString(fetchedRoot, "userCenterUrl");
+                if (parsedUserCenter != null && !parsedUserCenter.isBlank()) {
+                    userCenterUrl = parsedUserCenter.trim();
+                }
+
+                String parsedDocs = JsonUtils.getString(fetchedRoot, "docsUrl");
+                if (parsedDocs != null && !parsedDocs.isBlank()) {
+                    docsUrl = parsedDocs.trim();
+                }
+
+                String parsedGroup = JsonUtils.getString(fetchedRoot, "groupUrl");
+                if (parsedGroup != null && !parsedGroup.isBlank()) {
+                    groupUrl = parsedGroup.trim();
+                }
+
+                String parsedWebsite = JsonUtils.getString(fetchedRoot, "officialWebsiteUrl");
+                if (parsedWebsite != null && !parsedWebsite.isBlank()) {
+                    officialWebsiteUrl = normalizeOfficialWebsiteUrl(parsedWebsite);
+                }
+
+                remoteConfigurationLoaded = true;
+                updateRemoteConfigurationState(defaultAuthServerUrl);
+                LOG.info("Applied FreeCore remote configuration: defaultAuthServerUrl=" + defaultAuthServerUrl
+                        + ", loginUrl=" + loginUrl + ", userCenterUrl=" + userCenterUrl
+                        + ", docsUrl=" + docsUrl + ", officialWebsiteUrl=" + officialWebsiteUrl);
+                return;
+            } catch (Exception e) {
+                lastError = e;
+                LOG.warning("Failed to parse fetched FreeCore remote configuration", e);
+            }
+        }
+
+        previousAuthServerUrl = null;
+        authServerChanged = false;
+        try {
+            defaultAuthServerUrl = readAppliedAuthenticationServerUrl();
+            readAppliedAdditionalUrls();
+            LOG.warning("Failed to load FreeCore remote configuration from all sources; using the last applied URL", lastError);
+        } catch (Exception stateError) {
+            defaultAuthServerUrl = BUILTIN_AUTH_SERVER_URL;
+            loginUrl = BUILTIN_LOGIN_URL;
+            userCenterUrl = BUILTIN_USER_CENTER_URL;
+            docsUrl = BUILTIN_DOCS_URL;
+            groupUrl = BUILTIN_GROUP_URL;
+            officialWebsiteUrl = BUILTIN_OFFICIAL_WEBSITE_URL;
+            if (lastError != null) {
+                stateError.addSuppressed(lastError);
+            }
+            LOG.warning("Failed to load FreeCore remote configuration and local state; "
+                    + "using the built-in URL", stateError);
         }
     }
 

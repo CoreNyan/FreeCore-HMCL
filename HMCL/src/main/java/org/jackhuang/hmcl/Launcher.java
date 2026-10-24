@@ -162,6 +162,8 @@ public final class Launcher extends Application {
                 if (FreeCoreBootstrap.consumeAuthenticationReloginRequired()) {
                     FreeCoreBrowserLoginServer.startLoginFlow();
                 }
+
+                FreeCoreBootstrap.startBackgroundConfigurationSync();
             });
         } catch (Throwable e) {
             CRASH_REPORTER.uncaughtException(Thread.currentThread(), e);
