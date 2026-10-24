@@ -1,8 +1,8 @@
 {
-  "defaultAuthServerUrl": "https://account.lynnhma.xyz/api/yggdrasil/",
-  "loginUrl": "https://account.lynnhma.xyz/auth/login",
-  "userCenterUrl": "https://account.lynnhma.xyz/user",
-  "docsUrl": "https://docs.lynnhma.xyz",
+  "defaultAuthServerUrl": "https://account.freecore.cc/api/yggdrasil/",
+  "loginUrl": "https://account.freecore.cc/auth/login",
+  "userCenterUrl": "https://account.freecore.cc/user",
+  "docsUrl": "https://docs.freecore.cc",
   "groupUrl": "https://qm.qq.com/q/fwCibn5mjC",
-  "officialWebsiteUrl": "https://lynnhma.xyz/"
+  "officialWebsiteUrl": "https://freecore.cc/"
 }
